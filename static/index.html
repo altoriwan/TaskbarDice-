@@ -965,7 +965,7 @@
 
     /**
      * Calculates organic natural stack horizontal stagger offset for physical hand-stacked look.
-     * Base die (i === 0) remains anchored at 0. Upper dice (i > 0) stagger naturally within [-1.8px, +1.8px].
+     * Base die (i === 0) remains anchored at 0. Upper dice (i > 0) stagger naturally within [-6.5px, +6.5px].
      */
     function getDieStackOffsetX(d, i) {
       if (i === 0) return 0;
@@ -976,13 +976,13 @@
       }
       // Alternate left/right based on level with pseudo-random organic magnitude
       const sign = (i % 2 === 1) ? -1 : 1;
-      const magnitude = 0.8 + ((hash % 100) / 100) * 1.0; // 0.8px .. 1.8px
+      const magnitude = 3.5 + ((hash % 100) / 100) * 3.0; // 3.5px .. 6.5px
       return Math.round(sign * magnitude * 10) / 10;
     }
 
     /**
      * Calculates organic physical micro-tilt angle for dice tower.
-     * Base die (i === 0) rests flat on floor. Upper dice (i > 0) have subtle micro-tilts within [-1.2 deg, +1.2 deg]
+     * Base die (i === 0) rests flat on floor. Upper dice (i > 0) have visible organic tilts within [-3.8 deg, +3.8 deg] (~0.04 - 0.065 rad)
      * plus dynamic landing wobble damping.
      */
     function getDieTiltAngle(d, i) {
@@ -992,13 +992,13 @@
       for (let k = 0; k < str.length; k++) {
         hash = (hash * 37 + str.charCodeAt(k)) & 0xffff;
       }
-      // Micro tilt ~0.010 to 0.018 radians (0.57 deg to 1.03 deg)
+      // Organic tilt ~0.040 to 0.065 radians (2.3 deg to 3.7 deg)
       const sign = (i % 2 === 1) ? -1 : 1;
-      const baseTilt = sign * (0.010 + ((hash % 80) / 10000));
+      const baseTilt = sign * (0.040 + ((hash % 100) / 100) * 0.025);
       // Dynamic landing settle wobble
       let wobble = 0;
       if (d && d.bounceFrame > 0) {
-        wobble = Math.sin(d.bounceFrame * 1.5) * 0.025;
+        wobble = Math.sin(d.bounceFrame * 1.5) * 0.05;
       }
       return baseTilt + wobble;
     }
