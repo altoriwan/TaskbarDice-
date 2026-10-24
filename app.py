@@ -10,6 +10,7 @@ class TaskbarDiceAPI:
     """Python API bridge exposed to the webview JavaScript context."""
     def __init__(self, storage=None):
         self._window = None
+        self._scale = 1.0
         base_dir = os.path.dirname(os.path.abspath(__file__))
         tasks_path = os.path.join(base_dir, "tasks.json")
         self.storage = storage or TaskStorage(tasks_path)
@@ -85,6 +86,53 @@ class TaskbarDiceAPI:
         if not success:
             return {"status": "not_found", "task_id": task_id}
         return {"status": "ok", "task_id": task_id, "was_overdue": was_overdue}
+
+    def set_scale(self, scale: float):
+        try:
+            scale = float(scale)
+        except (ValueError, TypeError):
+            scale = 1.0
+
+        if scale not in (1.0, 1.5, 2.0):
+            if scale < 1.0:
+                scale = 1.0
+            elif scale > 2.0:
+                scale = 2.0
+
+        target_w = int(round(400 * scale))
+        target_h = int(round(420 * scale))
+        self._scale = scale
+
+        if self._window:
+            try:
+                curr_w = getattr(self._window, "width", 400) or 400
+                curr_h = getattr(self._window, "height", 420) or 420
+                curr_x = getattr(self._window, "x", 0) if getattr(self._window, "x", None) is not None else 0
+                curr_y = getattr(self._window, "y", 0) if getattr(self._window, "y", None) is not None else 0
+
+                # Keep bottom-right corner anchored to taskbar area
+                delta_w = target_w - curr_w
+                delta_h = target_h - curr_h
+                new_x = max(0, curr_x - delta_w)
+                new_y = max(0, curr_y - delta_h)
+
+                if hasattr(self._window, "move"):
+                    self._window.move(new_x, new_y)
+                if hasattr(self._window, "resize"):
+                    self._window.resize(target_w, target_h)
+            except Exception as e:
+                print(f"[TaskbarDice] Window resize error: {e}")
+                if hasattr(self._window, "resize"):
+                    try:
+                        self._window.resize(target_w, target_h)
+                    except Exception as e2:
+                        print(f"[TaskbarDice] Resize fallback error: {e2}")
+
+        print(f"[TaskbarDice] Scale set to {scale}x ({target_w}x{target_h})")
+        return {"status": "ok", "scale": scale, "width": target_w, "height": target_h}
+
+    def get_scale(self):
+        return {"status": "ok", "scale": getattr(self, "_scale", 1.0)}
 
     def close_app(self):
         print("[TaskbarDice] Closing application...")

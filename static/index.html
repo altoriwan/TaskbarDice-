@@ -83,6 +83,44 @@
       background: #ce372b;
     }
 
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 20;
+    }
+
+    .scale-chips {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+
+    .btn-scale {
+      background: #212529;
+      color: #888888;
+      border: 1px solid #000000;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 6px;
+      line-height: 1;
+      padding: 3px 4px;
+      cursor: pointer;
+      box-shadow: inset -1px -1px #000, inset 1px 1px #444;
+      transition: all 0.1s;
+    }
+
+    .btn-scale:hover {
+      background: #333a42;
+      color: #ffffff;
+    }
+
+    .btn-scale.is-active {
+      background: #209cee !important;
+      color: #ffffff !important;
+      font-weight: bold;
+      box-shadow: inset 1px 1px #000, inset -1px -1px #666;
+    }
+
     /* Canvas 2D filling middle (320px) */
     #diceCanvas {
       display: block;
@@ -410,7 +448,14 @@
   <!-- Frameless Drag Header & Controls (26px) -->
   <div class="drag-header pywebview-drag-region">
     <div class="drag-region">TASKBAR DICE :: M1</div>
-    <button class="btn-close" id="closeBtn" title="Close Window" type="button">X</button>
+    <div class="header-controls">
+      <div class="scale-chips" id="scaleChips" title="Window Scale">
+        <button type="button" class="btn-scale is-active" data-scale="1" title="Scale 1x (400x420)">1x</button>
+        <button type="button" class="btn-scale" data-scale="1.5" title="Scale 1.5x (600x630)">1.5x</button>
+        <button type="button" class="btn-scale" data-scale="2" title="Scale 2x (800x840)">2x</button>
+      </div>
+      <button class="btn-close" id="closeBtn" title="Close Window" type="button">X</button>
+    </div>
   </div>
 
   <div id="feedbackToast" class="feedback-toast">TASK LOGGED!</div>
@@ -3365,6 +3410,79 @@
         window.close();
       }
     });
+
+    // Screen / Window Scaling (1x, 1.5x, 2x)
+    const scaleButtons = document.querySelectorAll('.btn-scale');
+    let currentAppScale = 1.0;
+
+    function setAppScale(scale, notifyBackend = true) {
+      const s = parseFloat(scale);
+      if (isNaN(s) || s <= 0) return;
+      const validScale = (s === 1.5) ? 1.5 : ((s >= 1.8) ? 2.0 : 1.0);
+      currentAppScale = validScale;
+
+      // Apply CSS zoom to document body
+      document.body.style.zoom = validScale.toString();
+
+      // Update button active state
+      scaleButtons.forEach(btn => {
+        const btnScale = parseFloat(btn.dataset.scale);
+        btn.classList.toggle('is-active', btnScale === validScale);
+      });
+
+      // Persist user preference in localStorage
+      try {
+        localStorage.setItem('taskbar_dice_scale', validScale.toString());
+      } catch (e) {}
+
+      // Notify pywebview Python bridge to resize desktop window & reposition
+      if (notifyBackend && window.pywebview && window.pywebview.api && window.pywebview.api.set_scale) {
+        window.pywebview.api.set_scale(validScale).catch(err => {
+          console.warn('[TaskbarDice] set_scale error:', err);
+        });
+      }
+
+      showToast(`SCALE: ${validScale}X`);
+    }
+
+    scaleButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = parseFloat(btn.dataset.scale);
+        setAppScale(s, true);
+      });
+    });
+
+    // Keyboard shortcuts for scaling: Ctrl+1 (1x), Ctrl+2 (1.5x), Ctrl+3 (2x)
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '1') {
+          e.preventDefault();
+          setAppScale(1.0, true);
+        } else if (e.key === '2') {
+          e.preventDefault();
+          setAppScale(1.5, true);
+        } else if (e.key === '3') {
+          e.preventDefault();
+          setAppScale(2.0, true);
+        }
+      }
+    });
+
+    // Restore saved scale on load
+    try {
+      const savedScale = parseFloat(localStorage.getItem('taskbar_dice_scale'));
+      if (savedScale && [1.0, 1.5, 2.0].includes(savedScale)) {
+        setAppScale(savedScale, true);
+      }
+    } catch (e) {}
+
+    function getAppScale() {
+      return currentAppScale;
+    }
+
+    // Programmatic test hook
+    window.setAppScale = setAppScale;
+    window.getAppScale = getAppScale;
   </script>
 </body>
 </html>
