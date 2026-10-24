@@ -6,13 +6,25 @@ import webview
 from dice_logic import TaskStorage, parse_task_input
 
 
+def get_bundle_dir() -> str:
+    """Returns directory containing bundled read-only assets (supports PyInstaller sys._MEIPASS)."""
+    return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_data_dir() -> str:
+    """Returns directory for writable persistent data files (tasks.json)."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 class TaskbarDiceAPI:
     """Python API bridge exposed to the webview JavaScript context."""
     def __init__(self, storage=None):
         self._window = None
         self._scale = 1.0
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        tasks_path = os.path.join(base_dir, "tasks.json")
+        data_dir = get_data_dir()
+        tasks_path = os.path.join(data_dir, "tasks.json")
         self.storage = storage or TaskStorage(tasks_path)
 
     def set_window(self, window):
@@ -166,8 +178,8 @@ def main():
     win_w, win_h = 400, 420
     x, y = calculate_anchor_position(win_w, win_h)
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    html_path = os.path.join(base_dir, "static", "index.html")
+    bundle_dir = get_bundle_dir()
+    html_path = os.path.join(bundle_dir, "static", "index.html")
 
     window = webview.create_window(
         title="TaskbarDice",
