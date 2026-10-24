@@ -1,0 +1,82 @@
+--- a/dice_logic.py
++++ b/dice_logic.py
+@@ -7,9 +7,13 @@
+ from typing import Dict, List, Any, Optional
+ 
++MAX_DURATION_MINUTES = 52_560_000  # Defensive clamp: ~100 years
++
+ def sanitize_input(text: str) -> str:
+     """Removes control characters and strips surrounding whitespace."""
++    if not isinstance(text, str):
++        text = str(text) if text is not None else ""
+     if not text:
+         return ""
+     cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+     return cleaned.strip()
+@@ -34,15 +38,16 @@
+     if weight is not None:
+         try:
+             w_val = int(weight)
+             explicit_weight = max(1, min(5, w_val))
+-        except (ValueError, TypeError):
++        except (ValueError, TypeError, OverflowError):
+             explicit_weight = None
+ 
+     # Explicit duration override validation
+     explicit_duration = None
+     if duration_minutes is not None:
+         try:
+             d_val = int(duration_minutes)
+             if d_val > 0:
+-                explicit_duration = d_val
+-        except (ValueError, TypeError):
++                explicit_duration = min(d_val, MAX_DURATION_MINUTES)
++        except (ValueError, TypeError, OverflowError):
+             explicit_duration = None
+ 
+     if not cleaned:
+@@ -52,5 +57,8 @@
+         if explicit_duration is not None:
+-            deadline_dt = now + timedelta(minutes=explicit_duration)
++            try:
++                deadline_dt = now + timedelta(minutes=explicit_duration)
++            except OverflowError:
++                deadline_dt = datetime.max
+             if explicit_duration == 15:
+                 deadline_str = "15 phút"
+@@ -145,11 +153,16 @@
+     # Calculate deadline timestamp (heuristic)
+-    if minute_match:
+-        deadline_dt = now + timedelta(minutes=int(minute_match.group(1)))
+-    elif hour_match:
+-        deadline_dt = now + timedelta(hours=float(hour_match.group(1)))
++    try:
++        if minute_match:
++            mins = min(int(minute_match.group(1)), MAX_DURATION_MINUTES)
++            deadline_dt = now + timedelta(minutes=mins)
++        elif hour_match:
++            hrs = min(float(hour_match.group(1)), 876_000.0)
++            deadline_dt = now + timedelta(hours=hrs)
+     elif has_tomorrow:
+         deadline_dt = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
+     elif has_today:
+         deadline_dt = now.replace(hour=23, minute=59, second=59)
+     elif has_week_or_report:
+         deadline_dt = now + timedelta(days=7)
+     else:
+         # Default 4-hour window
+         deadline_dt = now + timedelta(hours=4)
++    except OverflowError:
++        deadline_dt = now + timedelta(hours=4)
+ 
+     # Apply explicit overrides if provided
+     if explicit_weight is not None:
+         weight_score = explicit_weight
+ 
+     if explicit_duration is not None:
+-        deadline_dt = now + timedelta(minutes=explicit_duration)
++        try:
++            deadline_dt = now + timedelta(minutes=explicit_duration)
++        except OverflowError:
++            deadline_dt = datetime.max
+         if explicit_duration == 15:

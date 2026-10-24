@@ -1,0 +1,3015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskbarDice - Milestone 4: Game Loop & Victory</title>
+  
+  <!-- Google Font: Press Start 2P -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  
+  <!-- NES.css 2.3.0 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/nes.css/2.3.0/css/nes.min.css">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 400px;
+      height: 420px;
+      max-width: 100vw;
+      max-height: 100vh;
+      overflow: hidden;
+      background-color: #121417;
+      color: #ffffff;
+      font-family: 'Press Start 2P', monospace;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      position: relative;
+    }
+
+    /* Draggable Title Header (26px) */
+    .drag-header {
+      width: 100%;
+      height: 26px;
+      min-height: 26px;
+      max-height: 26px;
+      flex: 0 0 26px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      background: #1a1d20;
+      border-bottom: 2px solid #000000;
+      z-index: 10;
+    }
+
+    .drag-region {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      cursor: grab;
+      font-size: 8px;
+      color: #92cc41;
+      letter-spacing: 1px;
+    }
+
+    .rot-badge {
+      font-size: 7px;
+      color: #f7d51d;
+      margin-right: 8px;
+    }
+
+    .btn-close {
+      cursor: pointer;
+      background: #e76e55;
+      color: #ffffff;
+      border: 2px solid #000000;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      line-height: 1;
+      padding: 2px 5px;
+      transition: background 0.1s;
+    }
+
+    .btn-close:hover {
+      background: #ce372b;
+    }
+
+    /* Canvas 2D filling middle (320px) */
+    #diceCanvas {
+      display: block;
+      width: 400px;
+      height: 320px;
+      flex: 0 0 320px;
+      box-sizing: border-box;
+      background-color: #121417;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      cursor: pointer;
+    }
+
+    /* Docked Bottom Control Panel (74px) */
+    .control-panel {
+      width: 100%;
+      height: 74px;
+      min-height: 74px;
+      max-height: 74px;
+      flex: 0 0 74px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+      padding: 4px 6px;
+      background: #181a1d;
+      border-top: 2px solid #000000;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      z-index: 5;
+    }
+
+    .panel-row-1 {
+      display: flex;
+      width: 100%;
+      height: 32px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .task-input {
+      flex: 0 0 calc(78% - 4px);
+      width: calc(78% - 4px);
+      height: 32px !important;
+      font-size: 8px !important;
+      padding: 4px 6px !important;
+      background-color: #212529 !important;
+      color: #ffffff !important;
+      box-sizing: border-box;
+    }
+
+    .btn-submit {
+      flex: 0 0 calc(22% - 2px);
+      width: calc(22% - 2px);
+      height: 32px;
+      padding: 0 !important;
+      font-size: 8px !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      box-sizing: border-box;
+    }
+
+    .panel-row-2 {
+      display: flex;
+      width: 100%;
+      height: 26px;
+      align-items: center;
+      justify-content: space-between;
+      box-sizing: border-box;
+      gap: 4px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .row-label {
+      font-size: 7px;
+      font-weight: bold;
+      margin-right: 2px;
+    }
+
+    .weight-label {
+      color: #92cc41;
+    }
+
+    .time-label {
+      color: #f7d51d;
+    }
+
+    .btn-chip {
+      background: #212529;
+      color: #aaaaaa;
+      border: 1px solid #000000;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      padding: 2px 4px;
+      line-height: 1.2;
+      cursor: pointer;
+      box-shadow: inset -1px -1px #000, inset 1px 1px #444;
+      transition: all 0.1s ease;
+    }
+
+    .btn-chip:hover {
+      background: #333a42;
+      color: #ffffff;
+    }
+
+    .btn-chip.is-active {
+      background: #209cee;
+      color: #ffffff;
+      box-shadow: inset 1px 1px #000, inset -1px -1px #666;
+    }
+
+    .weight-btn.is-active {
+      background: #92cc41;
+      color: #000000;
+      font-weight: bold;
+    }
+
+    .time-btn.is-active {
+      background: #f7d51d;
+      color: #000000;
+      font-weight: bold;
+    }
+
+    .row-sep {
+      width: 1px;
+      height: 16px;
+      background: #333942;
+      margin: 0 2px;
+    }
+
+    /* NES Shake Warning Animation */
+    @keyframes nes-shake {
+      0% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+      100% { transform: translateX(0); }
+    }
+
+    .shake-anim {
+      animation: nes-shake 0.35s ease-in-out;
+    }
+
+    .task-input:disabled {
+      background-color: #2b1d1d !important;
+      color: #ff8888 !important;
+      cursor: not-allowed;
+      border-color: #e76e55 !important;
+    }
+
+    /* Retro Feedback Toast */
+    .feedback-toast {
+      position: absolute;
+      top: 34px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 7px;
+      color: #ffd700;
+      background: rgba(0, 0, 0, 0.9);
+      border: 2px solid #ffd700;
+      padding: 4px 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+      z-index: 20;
+      white-space: nowrap;
+    }
+
+    /* Anti-Slacking Modal Overlay */
+    .modal-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 12px;
+    }
+
+    .modal-box {
+      width: 92%;
+      max-width: 360px;
+      background: #1a1d20 !important;
+      color: #ffffff;
+      padding: 10px !important;
+      text-align: center;
+      border-image-repeat: repeat;
+    }
+
+    .modal-title {
+      color: #ffd700;
+      font-size: 8px;
+      margin-bottom: 6px;
+    }
+
+    .modal-body-text {
+      font-size: 7px;
+      margin-bottom: 6px;
+      line-height: 1.4;
+      color: #ffffff;
+    }
+
+    .modal-task-title {
+      font-size: 7px;
+      color: #92cc41;
+      margin-bottom: 6px;
+      padding: 4px;
+      background: #0d0f12;
+      border: 1px dashed #92cc41;
+      word-break: break-all;
+    }
+
+    .modal-subtext {
+      font-size: 6px;
+      color: #a8a8a8;
+      margin-bottom: 10px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+    }
+
+    .btn-modal {
+      font-size: 6px !important;
+      padding: 6px 8px !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Frameless Drag Header & Controls (26px) -->
+  <div class="drag-header pywebview-drag-region">
+    <div class="drag-region">TASKBAR DICE :: M1</div>
+    <span id="rotStatusBadge" class="rot-badge">[D] REALTIME</span>
+    <button class="btn-close" id="closeBtn" title="Close Window" type="button">X</button>
+  </div>
+
+  <div id="feedbackToast" class="feedback-toast">TASK LOGGED!</div>
+
+  <!-- Middle Canvas 2D (320px) -->
+  <canvas id="diceCanvas" width="400" height="320"></canvas>
+
+  <!-- Bottom 2-Row Control Panel (74px) -->
+  <form class="control-panel" id="taskForm">
+    <!-- Row 1: Text input 78% + Green NES ADD button 22% -->
+    <div class="panel-row-1">
+      <input 
+        type="text" 
+        id="taskInput" 
+        class="nes-input is-dark task-input" 
+        placeholder="Type task & press Enter..." 
+        autocomplete="off"
+        required
+      />
+      <button type="submit" id="addBtn" class="nes-btn is-success btn-submit">ADD</button>
+    </div>
+    <!-- Row 2: Weight selection W: 1-5 + Time presets T: 15m, 25m, 1h, 4h, ..m -->
+    <div class="panel-row-2">
+      <div class="control-group weight-group">
+        <span class="row-label weight-label">W:</span>
+        <button type="button" class="btn-chip weight-btn is-active" data-w="1">1</button>
+        <button type="button" class="btn-chip weight-btn" data-w="2">2</button>
+        <button type="button" class="btn-chip weight-btn" data-w="3">3</button>
+        <button type="button" class="btn-chip weight-btn" data-w="4">4</button>
+        <button type="button" class="btn-chip weight-btn" data-w="5">5</button>
+      </div>
+      <div class="row-sep"></div>
+      <div class="control-group time-group">
+        <span class="row-label time-label">T:</span>
+        <button type="button" class="btn-chip time-btn" data-t="15m">15m</button>
+        <button type="button" class="btn-chip time-btn is-active" data-t="25m">25m</button>
+        <button type="button" class="btn-chip time-btn" data-t="1h">1h</button>
+        <button type="button" class="btn-chip time-btn" data-t="4h">4h</button>
+        <button type="button" class="btn-chip time-btn" data-t="custom" id="customTimeBtn">..m</button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Anti-Slacking Retro Modal -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="nes-dialog is-dark modal-box">
+      <p class="modal-title">INTEGRITY CHECK</p>
+      <p class="modal-body-text">DID YOU ACTUALLY FINISH THIS TASK?</p>
+      <p id="modalTaskName" class="modal-task-title">TASK: ...</p>
+      <p class="modal-subtext">No cheating. Integrity check.</p>
+      <div class="modal-actions">
+        <button type="button" id="confirmCompleteBtn" class="nes-btn is-success btn-modal">YES, COMPLETED!</button>
+        <button type="button" id="cancelCompleteBtn" class="nes-btn is-error btn-modal">NOT YET</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('diceCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const feedbackToast = document.getElementById('feedbackToast');
+    const rotStatusBadge = document.getElementById('rotStatusBadge');
+
+    function showToast(msg) {
+      feedbackToast.textContent = msg;
+      feedbackToast.style.opacity = '1';
+      setTimeout(() => {
+        feedbackToast.style.opacity = '0';
+      }, 1500);
+    }
+
+    // Weight to Dimensions mapping
+    const DICE_CONFIG = {
+      1: { width: 32, height: 20, ry: 8 },
+      2: { width: 40, height: 24, ry: 10 },
+      3: { width: 48, height: 28, ry: 12 },
+      4: { width: 56, height: 32, ry: 14 },
+      5: { width: 64, height: 36, ry: 16 }
+    };
+
+    // Stacking state
+    let diceStack = [];
+    const GROUND_Y = 290;
+
+    // 10 Escalating Lovecraftian Abyss Background Themes
+    const ABYSS_TIERS = [
+      "Void",
+      "Cold Dust",
+      "Frost Cracks",
+      "Sprouting Thorns",
+      "Creeping Vines",
+      "Toxic Spores",
+      "Blood Veins",
+      "Demon Eyes",
+      "Abyssal Eclipse",
+      "Pandemonium Overload"
+    ];
+
+    // Background Tier & Rot Interpolation State for Butter-Smooth Transitions
+    let hasHadTasks = false;
+    let hasClearedAll = false;
+    let visualTier = 0.0;
+    let visualRot = 0.0;
+    window.zenSimulatedHour = null; // Test/debug override hook
+
+    // Static Pre-allocated Pools for Abyss Background Layers
+    const COLD_DUST_COUNT = 30;
+    const coldDustParticles = [];
+    for (let i = 0; i < COLD_DUST_COUNT; i++) {
+      coldDustParticles.push({
+        x: Math.random() * 400,
+        y: Math.random() * 320,
+        vx: -0.2 - Math.random() * 0.4,
+        vy: 0.3 + Math.random() * 0.5,
+        size: Math.random() > 0.6 ? 2 : 1,
+        alpha: 0.3 + Math.random() * 0.5
+      });
+    }
+
+    const FROST_CRACKS = [
+      [{x: 0, y: 0}, {x: 25, y: 15}, {x: 45, y: 18}, {x: 65, y: 35}],
+      [{x: 0, y: 25}, {x: 18, y: 38}, {x: 35, y: 60}],
+      [{x: 400, y: 0}, {x: 375, y: 15}, {x: 355, y: 20}, {x: 335, y: 38}],
+      [{x: 400, y: 30}, {x: 380, y: 45}, {x: 360, y: 68}],
+      [{x: 0, y: 320}, {x: 30, y: 300}, {x: 55, y: 295}, {x: 75, y: 280}],
+      [{x: 400, y: 320}, {x: 370, y: 305}, {x: 345, y: 290}, {x: 320, y: 282}]
+    ];
+
+    const SPROUTING_THORNS = [
+      { x: 30, h: 28, dir: 1 },
+      { x: 70, h: 20, dir: -1 },
+      { x: 120, h: 16, dir: 1 },
+      { x: 280, h: 18, dir: -1 },
+      { x: 330, h: 22, dir: 1 },
+      { x: 370, h: 30, dir: -1 }
+    ];
+
+    const TOXIC_SPORES_COUNT = 25;
+    const toxicSpores = [];
+    for (let i = 0; i < TOXIC_SPORES_COUNT; i++) {
+      toxicSpores.push({
+        x: Math.random() * 400,
+        y: Math.random() * 320,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -0.2 - Math.random() * 0.4,
+        size: Math.random() > 0.5 ? 2 : 1,
+        color: Math.random() > 0.5 ? '#84cc16' : '#a3e635',
+        pulseOffset: Math.random() * Math.PI * 2
+      });
+    }
+
+    const BLOOD_VEINS = [
+      [{x: 0, y: 60}, {x: 40, y: 75}, {x: 75, y: 65}, {x: 105, y: 80}],
+      [{x: 40, y: 75}, {x: 60, y: 105}, {x: 90, y: 120}],
+      [{x: 0, y: 140}, {x: 35, y: 150}, {x: 70, y: 175}],
+      [{x: 400, y: 60}, {x: 360, y: 75}, {x: 325, y: 65}, {x: 295, y: 80}],
+      [{x: 360, y: 75}, {x: 340, y: 105}, {x: 310, y: 120}],
+      [{x: 400, y: 140}, {x: 365, y: 150}, {x: 330, y: 175}]
+    ];
+
+    const DEMON_EYES = [
+      { x: 60, y: 85, rx: 7, ry: 4, blinkPeriod: 3600, blinkOffset: 0 },
+      { x: 340, y: 80, rx: 8, ry: 5, blinkPeriod: 4200, blinkOffset: 1200 },
+      { x: 45, y: 180, rx: 6, ry: 3, blinkPeriod: 3900, blinkOffset: 2400 },
+      { x: 355, y: 185, rx: 7, ry: 4, blinkPeriod: 4500, blinkOffset: 800 },
+      { x: 110, y: 55, rx: 6, ry: 3, blinkPeriod: 3300, blinkOffset: 1700 },
+      { x: 290, y: 50, rx: 6, ry: 3, blinkPeriod: 4800, blinkOffset: 3100 }
+    ];
+
+    // Persistent particle systems for Zen Garden
+    const zenPetals = [];
+    for (let i = 0; i < 18; i++) {
+      zenPetals.push({
+        x: Math.random() * 400,
+        y: Math.random() * 320,
+        vx: 0.3 + Math.random() * 0.5,
+        vy: 0.4 + Math.random() * 0.6,
+        size: Math.random() > 0.5 ? 3 : 2,
+        swaySpeed: 0.002 + Math.random() * 0.003,
+        seed: Math.random() * 100
+      });
+    }
+
+    const zenFireflies = [];
+    for (let i = 0; i < 10; i++) {
+      zenFireflies.push({
+        x: 40 + Math.random() * 320,
+        y: 120 + Math.random() * 130,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+
+    // Hover inspection state
+    let hoveredDie = null;
+    let mousePos = { x: -1, y: -1 };
+
+    // Developer Speed-Test Mode state
+    let devMode = 0;
+
+    // Particle Pools & Zero-Allocation Recycling Pools (60 FPS & Zero GC Churn)
+    const MAX_SLIME_DRIPS = 80;
+    const slimeDripPool = [];
+    for (let i = 0; i < MAX_SLIME_DRIPS; i++) {
+      slimeDripPool.push({
+        active: false,
+        x: 0,
+        y: 0,
+        vy: 0,
+        gravity: 0.1,
+        length: 2,
+        color: '#84cc16',
+        glowColor: 'rgba(132, 204, 22, 0.4)',
+        type: 'green'
+      });
+    }
+    // Backward-compatibility alias
+    const slimeParticles = slimeDripPool;
+
+    const MAX_SLIME_PUDDLES = 12;
+    const slimePuddlePool = [];
+    for (let i = 0; i < MAX_SLIME_PUDDLES; i++) {
+      slimePuddlePool.push({
+        active: false,
+        x: 0,
+        y: GROUND_Y,
+        width: 0,
+        targetWidth: 0,
+        maxWidth: 55,
+        height: 3,
+        color: '#022c22',
+        rimColor: '#365314',
+        highlightColor: '#84cc16',
+        bubbleColor: '#a3e635',
+        alpha: 1.0,
+        bubbles: [
+          { xRel: -4, progress: 0.1, speed: 0.02, size: 2.2 },
+          { xRel: 3, progress: 0.6, speed: 0.015, size: 2.6 },
+          { xRel: -7, progress: 0.85, speed: 0.025, size: 1.8 }
+        ]
+      });
+    }
+
+    const MAX_SLIME_SPLASHES = 24;
+    const slimeSplashPool = [];
+    for (let i = 0; i < MAX_SLIME_SPLASHES; i++) {
+      slimeSplashPool.push({
+        active: false,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        life: 0,
+        maxLife: 12,
+        color: '#84cc16'
+      });
+    }
+
+    const explosionParticles = [];
+
+    /**
+     * Calculates erratic micro-jitter offsets (dx, dy) for Stage 5 twitch vibration.
+     * Frequency and amplitude intensify significantly when overdue (rot >= 1.0).
+     */
+    function calculateTwitchJitter(rot, index, timestamp) {
+      if (rot < 0.8) return { dx: 0, dy: 0 };
+
+      const isOverdue = rot >= 1.0;
+      // Overdue amplifies amplitude up to 2.8x
+      const severity = isOverdue ? Math.min(2.8, 1.2 + (rot - 1.0) * 1.6) : 1.0;
+      // Overdue increases frequency from 0.028 to 0.055
+      const freq = isOverdue ? 0.055 : 0.028;
+      const t = timestamp * freq + (index * 19.73);
+
+      // Spasm gate: erratic bursts simulating nervous twitching
+      const spasmGate = Math.sin(t * 2.1) * Math.cos(t * 3.7);
+      const inBurst = isOverdue || Math.abs(spasmGate) > 0.25;
+
+      let dx = 0;
+      let dy = 0;
+
+      if (inBurst) {
+        const harmonicX = Math.sin(t * 5.3) * 0.5 + Math.sin(t * 11.7) * 0.3;
+        const harmonicY = Math.cos(t * 4.7) * 0.4 + Math.cos(t * 9.1) * 0.3;
+        const noiseX = (Math.random() - 0.5) * 1.2;
+        const noiseY = (Math.random() - 0.5) * 1.0;
+
+        const baseAmp = isOverdue ? 2.4 : 1.0;
+        dx = (harmonicX + noiseX) * baseAmp * severity;
+        dy = (harmonicY + noiseY) * (baseAmp * 0.75) * severity;
+      }
+
+      // Micro-clamp to keep pixel art aesthetic crisp
+      const maxClamp = isOverdue ? 4.5 : 1.8;
+      dx = Math.max(-maxClamp, Math.min(maxClamp, dx));
+      dy = Math.max(-maxClamp, Math.min(maxClamp, dy));
+
+      return { dx, dy };
+    }
+
+    // Screen Shake & Streaks & Floating Texts
+    let screenShakeFrames = 0;
+    let screenShakeMagnitude = 0;
+    let sessionStreak = 0;
+    const floatingTexts = [];
+
+    function triggerScreenShake(magnitude, frames) {
+      screenShakeMagnitude = magnitude;
+      screenShakeFrames = frames;
+    }
+
+    function spawnFloatingText(x, y, text, color = '#ffd700') {
+      floatingTexts.push({
+        x: x,
+        y: y,
+        text: text,
+        color: color,
+        life: 60,
+        maxLife: 60
+      });
+    }
+
+    function updateAndDrawFloatingTexts(c) {
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y -= 0.6;
+        ft.life--;
+        const alpha = Math.max(0, ft.life / ft.maxLife);
+
+        c.save();
+        c.globalAlpha = alpha;
+        c.font = '7px "Press Start 2P"';
+        c.textAlign = 'center';
+        // Drop shadow
+        c.fillStyle = '#000000';
+        c.fillText(ft.text, ft.x + 1, ft.y + 1);
+        c.fillStyle = ft.color;
+        c.fillText(ft.text, ft.x, ft.y);
+        c.restore();
+
+        if (ft.life <= 0) {
+          floatingTexts.splice(i, 1);
+        }
+      }
+    }
+
+    function drawOverloadBanner(c) {
+      const now = Date.now();
+      const blink = Math.floor(now / 220) % 2 === 0;
+
+      c.save();
+      c.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      c.fillRect(8, 32, 384, 18);
+      c.lineWidth = 1;
+      c.strokeStyle = blink ? '#e76e55' : '#f7d51d';
+      c.strokeRect(8, 32, 384, 18);
+
+      c.font = '7px "Press Start 2P"';
+      c.textAlign = 'center';
+      c.fillStyle = blink ? '#e76e55' : '#f7d51d';
+      c.fillText('TOWER OVERLOAD (10/10)! CLEAR TASKS TO RESUME', 200, 44);
+      c.restore();
+    }
+
+    function updateOverloadUIState() {
+      const isOverloaded = diceStack.length >= 10;
+      const submitBtn = document.querySelector('.btn-submit');
+      const inputEl = document.getElementById('taskInput');
+
+      if (isOverloaded) {
+        if (inputEl) {
+          inputEl.disabled = true;
+          inputEl.placeholder = "TOWER OVERLOAD (10/10) - CLEAR!";
+        }
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.classList.add('is-disabled');
+        }
+      } else {
+        if (inputEl) {
+          inputEl.disabled = false;
+          inputEl.placeholder = "Type task & press Enter...";
+        }
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove('is-disabled');
+        }
+      }
+    }
+
+    // Selected task for modal
+    let selectedTask = null;
+    let hasLoadedTasksOnce = false;
+
+    /**
+     * Computes effective rot_factor (unclamped >= 0.0 for overdue tracking)
+     */
+    function getEffectiveRotFactor(die) {
+      if (devMode === 1) return 0.10;
+      if (devMode === 2) return 0.30;
+      if (devMode === 3) return 0.50;
+      if (devMode === 4) return 0.70;
+      if (devMode === 5) return 0.90;
+      if (devMode === 6) return 1.25;
+
+      if (!die.created_at || !die.deadline_at) {
+        return 0.2;
+      }
+
+      const createdTime = new Date(die.created_at).getTime();
+      const deadlineTime = new Date(die.deadline_at).getTime();
+      const now = Date.now();
+
+      const totalSpan = deadlineTime - createdTime;
+      if (totalSpan <= 0) return 1.0;
+
+      const elapsed = now - createdTime;
+      const rot = elapsed / totalSpan;
+
+      // Allow rot to exceed 1.0 when overdue (matching dice_logic.py)
+      return Math.max(0.0, rot);
+    }
+
+    /**
+     * Computes raw average rot factor across all active stacked dice
+     */
+    function calculateAverageRot() {
+      if (!diceStack || diceStack.length === 0) return 0.0;
+      let sum = 0;
+      for (let i = 0; i < diceStack.length; i++) {
+        sum += getEffectiveRotFactor(diceStack[i]);
+      }
+      return sum / diceStack.length;
+    }
+
+    /**
+     * Stacking layout sorting by weight_score descending
+     */
+    function recalculateTargets() {
+      diceStack.sort((a, b) => b.weight_score - a.weight_score);
+      const count = diceStack.length;
+      // Compaction: When stack > 5, compress step dynamically so 10 dice fit safely in 320px canvas
+      const compressedStep = count > 5 ? Math.max(14, Math.floor(180 / (count - 1))) : null;
+
+      for (let i = 0; i < count; i++) {
+        const d = diceStack[i];
+        const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
+
+        if (i === 0) {
+          d.targetY = GROUND_Y - cfg.ry - cfg.height;
+        } else {
+          const prevDie = diceStack[i - 1];
+          const step = (compressedStep !== null) ? Math.min(cfg.height, compressedStep) : cfg.height;
+          d.targetY = prevDie.targetY - step;
+        }
+      }
+
+      updateOverloadUIState();
+    }
+
+    /**
+     * Adds die to stack
+     */
+    function addDieToStack(task, isInitial = false) {
+      hasHadTasks = true;
+      hasClearedAll = false;
+      const cfg = DICE_CONFIG[task.weight_score] || DICE_CONFIG[3];
+
+      const newDie = {
+        id: task.id,
+        title: task.title,
+        weight_score: task.weight_score,
+        deadline_str: task.deadline_str,
+        created_at: task.created_at,
+        deadline_at: task.deadline_at,
+        currentY: isInitial ? 0 : -40,
+        targetY: 0,
+        velocityY: isInitial ? 0 : 2,
+        bounceFrame: 0
+      };
+
+      diceStack.push(newDie);
+      recalculateTargets();
+
+      if (isInitial) {
+        newDie.currentY = newDie.targetY;
+      }
+    }
+
+    /**
+     * Spawns physics-based pixel explosion particles upon task completion
+     */
+    function triggerDiceExplosion(task) {
+      const cfg = DICE_CONFIG[task.weight_score] || DICE_CONFIG[3];
+      const centerX = 200;
+      const centerY = task.currentY + cfg.ry + (cfg.height / 2);
+      const rot = getEffectiveRotFactor(task);
+
+      let palette = [];
+      if (rot < 0.4) {
+        palette = ['#ffffff', '#f8f9fa', '#d6d8db', '#b0b5be', '#ffd700'];
+      } else if (rot < 0.75) {
+        palette = ['#dedbb8', '#bfbca0', '#9e9b81', '#2b291d', '#57534e'];
+      } else {
+        palette = ['#4d7c0f', '#84cc16', '#a855f7', '#3b0764', '#140428'];
+      }
+
+      const count = 50;
+      for (let i = 0; i < count; i++) {
+        const vx = (Math.random() - 0.5) * 8.0; // -4.0 to 4.0
+        const vy = -2.0 - (Math.random() * 4.0); // -6.0 to -2.0 upward burst
+        const size = Math.random() > 0.5 ? 3 : 2;
+        const color = palette[Math.floor(Math.random() * palette.length)];
+
+        explosionParticles.push({
+          x: centerX + (Math.random() - 0.5) * (cfg.width * 0.7),
+          y: centerY + (Math.random() - 0.5) * (cfg.height * 0.7),
+          vx: vx,
+          vy: vy,
+          size: size,
+          color: color,
+          life: 50,
+          maxLife: 50
+        });
+      }
+    }
+
+    /**
+     * Updates and draws explosion particles with strict memory pool caps
+     */
+    function updateAndDrawExplosions(c) {
+      if (explosionParticles.length > 250) {
+        explosionParticles.splice(0, explosionParticles.length - 200);
+      }
+      for (let i = explosionParticles.length - 1; i >= 0; i--) {
+        const p = explosionParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.25; // gravity acceleration
+        p.life--;
+
+        const alpha = Math.max(0, p.life / p.maxLife);
+        c.save();
+        c.globalAlpha = alpha;
+        c.fillStyle = p.color;
+        c.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
+        c.restore();
+
+        if (p.life <= 0 || p.y > 324) {
+          explosionParticles.splice(i, 1);
+        }
+      }
+    }
+
+    /**
+     * Draws Background Procedural Corruption Roots
+     */
+    function drawCorruptionRoots(c, overallRot) {
+      if (overallRot < 0.05) return;
+
+      const time = Date.now() * 0.003;
+      const isTwitching = overallRot >= 0.75;
+
+      c.save();
+      c.lineJoin = 'miter';
+      c.lineCap = 'square';
+
+      const leftBranches = [
+        { sx: 0, sy: 320, tx: 140, ty: 295, cp1x: 40, cp1y: 310, cp2x: 90, cp2y: 300 },
+        { sx: 0, sy: 300, tx: 110, ty: 285, cp1x: 30, cp1y: 290, cp2x: 70, cp2y: 280 },
+        { sx: 20, sy: 320, tx: 160, ty: 300, cp1x: 60, cp1y: 312, cp2x: 120, cp2y: 302 }
+      ];
+
+      const rightBranches = [
+        { sx: 400, sy: 320, tx: 260, ty: 295, cp1x: 360, cp1y: 310, cp2x: 310, cp2y: 300 },
+        { sx: 400, sy: 300, tx: 290, ty: 285, cp1x: 370, cp1y: 290, cp2x: 330, cp2y: 280 },
+        { sx: 380, sy: 320, tx: 240, ty: 300, cp1x: 340, cp1y: 312, cp2x: 280, cp2y: 302 }
+      ];
+
+      const allBranches = [...leftBranches, ...rightBranches];
+
+      allBranches.forEach((b, idx) => {
+        const growth = Math.min(1.0, overallRot * 1.3);
+        const pulse = isTwitching ? Math.sin(time + idx * 1.7) * 2.5 : 0;
+
+        const curTx = b.sx + (b.tx - b.sx) * growth;
+        const curTy = b.sy + (b.ty - b.sy) * growth + pulse;
+        const curCp1x = b.sx + (b.cp1x - b.sx) * growth;
+        const curCp1y = b.sy + (b.cp1y - b.sy) * growth;
+        const curCp2x = b.sx + (b.cp2x - b.sx) * growth;
+        const curCp2y = b.sy + (b.cp2y - b.sy) * growth + pulse * 0.5;
+
+        c.strokeStyle = overallRot >= 0.75 ? '#3b0764' : '#1e1b4b';
+        c.lineWidth = 3;
+        c.beginPath();
+        c.moveTo(b.sx, b.sy);
+        c.bezierCurveTo(curCp1x, curCp1y, curCp2x, curCp2y, curTx, curTy);
+        c.stroke();
+
+        c.strokeStyle = '#05020a';
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(b.sx, b.sy);
+        c.bezierCurveTo(curCp1x, curCp1y, curCp2x, curCp2y, curTx, curTy);
+        c.stroke();
+
+        if (growth > 0.4) {
+          c.fillStyle = '#05020a';
+          c.fillRect(curCp1x, curCp1y - 2, 2, 3);
+          c.fillRect(curCp2x, curCp2y + 1, 2, 3);
+          if (growth > 0.8) {
+            c.fillRect(curTx - 1, curTy - 2, 3, 2);
+          }
+        }
+      });
+
+      c.restore();
+    }
+
+    /**
+     * Spawns continuous viscous slime drips from Stage 5 dice along isometric lower edges.
+     */
+    function spawnStage5SlimeDrip(renderX, renderY, rx, ry, height, rot) {
+      if (rot < 0.8) return;
+
+      const isOverdue = rot >= 1.0;
+      // Drip spawn chance: 8% normal Stage 5, 22% when overdue
+      const spawnChance = isOverdue ? 0.22 : 0.08;
+      if (Math.random() > spawnChance) return;
+
+      for (let k = 0; k < MAX_SLIME_DRIPS; k++) {
+        const p = slimeDripPool[k];
+        if (!p.active) {
+          p.active = true;
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const u = Math.random();
+          p.x = renderX + side * u * rx * 0.85;
+          p.y = renderY + ry + height - (u * ry * 0.6);
+          p.vy = isOverdue ? (0.7 + Math.random() * 0.7) : (0.4 + Math.random() * 0.4);
+          p.gravity = 0.08 + Math.random() * 0.04;
+          p.length = 2;
+
+          const isPurple = Math.random() < 0.45;
+          if (isPurple) {
+            p.color = Math.random() < 0.5 ? '#c084fc' : '#a855f7';
+            p.glowColor = 'rgba(192, 132, 252, 0.4)';
+            p.type = 'purple';
+          } else {
+            p.color = Math.random() < 0.5 ? '#84cc16' : '#a3e635';
+            p.glowColor = 'rgba(132, 204, 22, 0.4)';
+            p.type = 'green';
+          }
+          break;
+        }
+      }
+    }
+
+    /**
+     * Handles slime droplet impact on floor: triggers splash and expands/creates puddles.
+     */
+    function triggerSlimeFloorImpact(impactX, color, type) {
+      // 1. Trigger micro-splatter
+      let splashCount = 0;
+      for (let i = 0; i < MAX_SLIME_SPLASHES && splashCount < 2; i++) {
+        const s = slimeSplashPool[i];
+        if (!s.active) {
+          s.active = true;
+          s.x = impactX;
+          s.y = GROUND_Y;
+          s.vx = (Math.random() - 0.5) * 1.8;
+          s.vy = -0.5 - Math.random() * 0.8;
+          s.life = 0;
+          s.maxLife = 8 + Math.floor(Math.random() * 6);
+          s.color = color;
+          splashCount++;
+        }
+      }
+
+      // 2. Feed or create floor puddle
+      let absorbed = false;
+      for (let i = 0; i < MAX_SLIME_PUDDLES; i++) {
+        const p = slimePuddlePool[i];
+        if (p.active && Math.abs(p.x - impactX) < (p.width * 0.6 + 10)) {
+          p.targetWidth = Math.min(p.maxWidth, p.targetWidth + 3.5);
+          p.alpha = Math.min(1.0, p.alpha + 0.1);
+          absorbed = true;
+          break;
+        }
+      }
+
+      if (!absorbed) {
+        for (let i = 0; i < MAX_SLIME_PUDDLES; i++) {
+          const p = slimePuddlePool[i];
+          if (!p.active) {
+            p.active = true;
+            p.x = impactX;
+            p.y = GROUND_Y + (Math.random() * 2);
+            p.width = 4;
+            p.targetWidth = 12;
+            p.maxWidth = 42 + Math.floor(Math.random() * 20);
+            p.height = 3;
+            p.alpha = 0.95;
+            if (type === 'purple') {
+              p.color = '#1e1b4b';
+              p.rimColor = '#7e22ce';
+              p.highlightColor = '#c084fc';
+              p.bubbleColor = '#a855f7';
+            } else {
+              p.color = '#022c22';
+              p.rimColor = '#365314';
+              p.highlightColor = '#84cc16';
+              p.bubbleColor = '#a3e635';
+            }
+            p.bubbles.forEach((b, idx) => {
+              b.progress = idx * 0.33;
+              b.speed = 0.012 + Math.random() * 0.012;
+              b.size = 1.8 + Math.random() * 1.2;
+              b.xRel = (Math.random() - 0.5) * 8;
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    /**
+     * Updates and draws animated dripping slime particles, floor puddles, and bubbles.
+     * Completely recycled with zero runtime heap allocations.
+     */
+    function updateAndDrawSlime(c) {
+      const isZen = (diceStack.length === 0);
+
+      // 1. DRAW & UPDATE FLOOR PUDDLES
+      for (let i = 0; i < MAX_SLIME_PUDDLES; i++) {
+        const p = slimePuddlePool[i];
+        if (!p.active) continue;
+
+        if (isZen) {
+          p.alpha -= 0.015;
+          if (p.alpha <= 0) {
+            p.active = false;
+            continue;
+          }
+        }
+
+        // Viscous pooling expansion
+        p.width += (p.targetWidth - p.width) * 0.06;
+        p.height = Math.max(3, Math.min(8, p.width * 0.22));
+
+        c.save();
+        c.globalAlpha = Math.max(0, p.alpha);
+
+        // Outer viscous rim
+        c.fillStyle = p.rimColor;
+        c.beginPath();
+        c.ellipse(p.x, p.y, p.width / 2 + 1, p.height / 2 + 0.5, 0, 0, Math.PI * 2);
+        c.fill();
+
+        // Dark core puddle
+        c.fillStyle = p.color;
+        c.beginPath();
+        c.ellipse(p.x, p.y, p.width / 2, p.height / 2, 0, 0, Math.PI * 2);
+        c.fill();
+
+        // Specular glistening edge
+        c.strokeStyle = p.highlightColor;
+        c.lineWidth = 1;
+        c.beginPath();
+        c.ellipse(p.x, p.y - 1, p.width * 0.35, p.height * 0.3, 0, Math.PI, Math.PI * 2);
+        c.stroke();
+
+        // Bubbles on floor puddle
+        p.bubbles.forEach((b) => {
+          b.progress += b.speed;
+          if (b.progress >= 1.0) {
+            b.progress = 0;
+            b.speed = 0.012 + Math.random() * 0.015;
+            b.size = 1.5 + Math.random() * 1.5;
+            b.xRel = (Math.random() - 0.5) * (p.width * 0.65);
+          }
+          const curRadius = b.size * Math.sin(b.progress * Math.PI);
+          if (curRadius > 0.4) {
+            const bx = p.x + b.xRel;
+            const by = p.y - (curRadius * 0.5);
+            c.fillStyle = p.bubbleColor;
+            c.beginPath();
+            c.arc(bx, by, curRadius, 0, Math.PI * 2);
+            c.fill();
+            if (curRadius > 1.3) {
+              c.fillStyle = '#ffffff';
+              c.fillRect(Math.floor(bx - 0.5), Math.floor(by - curRadius * 0.5), 1, 1);
+            }
+          }
+        });
+
+        c.restore();
+      }
+
+      // 2. UPDATE & DRAW FALLING SLIME DRIPS
+      for (let i = 0; i < MAX_SLIME_DRIPS; i++) {
+        const p = slimeDripPool[i];
+        if (!p.active) continue;
+
+        p.vy += p.gravity;
+        p.y += p.vy;
+        p.length = Math.max(2, Math.min(6, Math.floor(p.vy * 1.8)));
+
+        if (p.y + p.length >= GROUND_Y) {
+          p.active = false;
+          triggerSlimeFloorImpact(p.x, p.color, p.type);
+          continue;
+        }
+
+        // Viscous teardrop rendering with glow
+        c.fillStyle = p.glowColor;
+        c.fillRect(Math.floor(p.x) - 1, Math.floor(p.y), 3, p.length);
+        c.fillStyle = p.color;
+        c.fillRect(Math.floor(p.x), Math.floor(p.y), 2, p.length);
+      }
+
+      // 3. UPDATE & DRAW SPLASH PARTICLES
+      for (let i = 0; i < MAX_SLIME_SPLASHES; i++) {
+        const s = slimeSplashPool[i];
+        if (!s.active) continue;
+
+        s.x += s.vx;
+        s.y += s.vy;
+        s.vy += 0.2;
+        s.life++;
+
+        c.fillStyle = s.color;
+        c.fillRect(Math.floor(s.x), Math.floor(s.y), 2, 2);
+
+        if (s.life >= s.maxLife || s.y > GROUND_Y + 6) {
+          s.active = false;
+        }
+      }
+    }
+
+    /**
+     * Draws a 2.5D Isometric Die with 5-Stage Rot Engine Textures
+     *
+     * Stage mapping:
+     * - Stage 1 (0-20%): Pristine ivory (#fdfbf7, #e5dec9) + specular shine highlight streak across top face.
+     * - Stage 2 (20-40%): Fading sandy yellow (#eae0c8, #c5b89a) + corner scratches on isometric edges.
+     * - Stage 3 (40-60%): Cracked stone (#8a8d8f, #5a5c5e) + 4 dark jagged fissures across die faces.
+     * - Stage 4 (60-80%): Mossy decay (#4a5d4e, #2d3a30) + purple/green fungus dots + creeping roots wrapping around sides.
+     * - Stage 5 (80-100%+ / Overdue): Toxic necrotic purple/green (#2e1f3d, #1a2e22) + blinking red overdue label when rot >= 1.0.
+     */
+    function drawRotIsometricDice(c, cx, cy, width, height, weight, label, rot) {
+      const rx = width / 2;
+      const ry = width / 4;
+
+      c.save();
+      c.lineWidth = 2;
+      c.lineJoin = 'miter';
+      c.strokeStyle = '#000000';
+
+      let leftColor, rightColor, topColor, pipColor;
+      let stage = 1;
+
+      if (rot < 0.20) {
+        // Stage 1 (0-20%): Pristine ivory (#fdfbf7, #e5dec9)
+        stage = 1;
+        topColor = '#fdfbf7';
+        leftColor = '#f1ecdc';
+        rightColor = '#e5dec9';
+        pipColor = '#18181b';
+      } else if (rot < 0.40) {
+        // Stage 2 (20-40%): Fading sandy yellow (#eae0c8, #c5b89a)
+        stage = 2;
+        topColor = '#eae0c8';
+        leftColor = '#d7cbb0';
+        rightColor = '#c5b89a';
+        pipColor = '#3c352a';
+      } else if (rot < 0.60) {
+        // Stage 3 (40-60%): Cracked stone (#8a8d8f, #5a5c5e)
+        stage = 3;
+        topColor = '#8a8d8f';
+        leftColor = '#727577';
+        rightColor = '#5a5c5e';
+        pipColor = '#222426';
+      } else if (rot < 0.80) {
+        // Stage 4 (60-80%): Mossy decay (#4a5d4e, #2d3a30)
+        stage = 4;
+        topColor = '#4a5d4e';
+        leftColor = '#3a4b3e';
+        rightColor = '#2d3a30';
+        pipColor = '#18221b';
+      } else {
+        // Stage 5 (80-100%+ / Overdue): Toxic necrotic purple/green (#2e1f3d, #1a2e22)
+        stage = 5;
+        topColor = '#2e1f3d';
+        leftColor = '#22162e';
+        rightColor = '#1a2e22';
+        pipColor = '#a3e635'; // Luminescent radioactive lime
+      }
+
+      // 1. LEFT FACE
+      c.fillStyle = leftColor;
+      c.beginPath();
+      c.moveTo(cx - rx, cy);
+      c.lineTo(cx, cy + ry);
+      c.lineTo(cx, cy + ry + height);
+      c.lineTo(cx - rx, cy + height);
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      // 2. RIGHT FACE
+      c.fillStyle = rightColor;
+      c.beginPath();
+      c.moveTo(cx, cy + ry);
+      c.lineTo(cx + rx, cy);
+      c.lineTo(cx + rx, cy + height);
+      c.lineTo(cx, cy + ry + height);
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      // 3. TOP FACE
+      c.fillStyle = topColor;
+      c.beginPath();
+      c.moveTo(cx, cy - ry);
+      c.lineTo(cx + rx, cy);
+      c.lineTo(cx, cy + ry);
+      c.lineTo(cx - rx, cy);
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      // 4. STAGE-SPECIFIC TEXTURE DETAILS & OVERLAYS
+      if (stage === 1) {
+        // Stage 1: Specular shine highlight streak across top face
+        c.save();
+        c.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(cx - rx * 0.65, cy - ry * 0.1);
+        c.lineTo(cx - rx * 0.15, cy - ry * 0.6);
+        c.stroke();
+
+        // Accent sparkle glint
+        c.fillStyle = '#ffffff';
+        c.fillRect(cx - rx * 0.35, cy - ry * 0.4 - 1, 2, 2);
+        c.restore();
+      } else if (stage === 2) {
+        // Stage 2: Subtle corner scratches on isometric edges
+        c.save();
+        c.strokeStyle = '#9c8f76';
+        c.lineWidth = 1;
+        // Scratch 1: top-left corner
+        c.beginPath();
+        c.moveTo(cx - rx + 3, cy - 1);
+        c.lineTo(cx - rx + 9, cy - ry * 0.3);
+        c.stroke();
+        // Scratch 2: center vertical edge
+        c.beginPath();
+        c.moveTo(cx - 2, cy + ry + 3);
+        c.lineTo(cx + 4, cy + ry + 7);
+        c.stroke();
+        // Scratch 3: left face edge
+        c.beginPath();
+        c.moveTo(cx - rx + 2, cy + height * 0.3);
+        c.lineTo(cx - rx + 7, cy + height * 0.35 + 2);
+        c.stroke();
+        // Scratch 4: right face ridge
+        c.beginPath();
+        c.moveTo(cx + rx * 0.45, cy + ry * 0.35);
+        c.lineTo(cx + rx * 0.65, cy + ry * 0.15 + 3);
+        c.stroke();
+        c.restore();
+      } else if (stage === 3) {
+        // Stage 3: Cracked stone + 4 dark jagged fissures across die faces
+        c.save();
+        c.strokeStyle = '#1c1d1f';
+        c.lineWidth = 1.5;
+        // Fissure 1: Top face cutting down across left face
+        c.beginPath();
+        c.moveTo(cx - rx * 0.2, cy - ry * 0.3);
+        c.lineTo(cx - rx * 0.45, cy + ry * 0.1);
+        c.lineTo(cx - rx * 0.35, cy + ry * 0.5 + 4);
+        c.lineTo(cx - rx * 0.5, cy + height * 0.6);
+        c.lineTo(cx - rx * 0.4, cy + height * 0.85);
+        c.stroke();
+
+        // Fissure 2: Center-top fracture branching into right face
+        c.beginPath();
+        c.moveTo(cx + 3, cy - ry * 0.2);
+        c.lineTo(cx + rx * 0.2, cy + ry * 0.2);
+        c.lineTo(cx + 2, cy + ry + 5);
+        c.lineTo(cx + rx * 0.25, cy + ry + 12);
+        c.lineTo(cx + rx * 0.15, cy + height * 0.7);
+        c.stroke();
+
+        // Fissure 3: Top face cross fracture
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(cx - rx * 0.45, cy + ry * 0.1);
+        c.lineTo(cx + rx * 0.1, cy - ry * 0.1);
+        c.lineTo(cx + rx * 0.35, cy + ry * 0.2);
+        c.stroke();
+
+        // Fissure 4: Right face lateral fracture
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(cx + rx * 0.6, cy + 2);
+        c.lineTo(cx + rx * 0.45, cy + ry * 0.4 + 5);
+        c.lineTo(cx + rx * 0.55, cy + height * 0.55);
+        c.stroke();
+        c.restore();
+      } else if (stage === 4) {
+        // Stage 4: Mossy decay + purple/green fungus dots + creeping roots wrapping around sides
+        c.save();
+        // 1. Creeping roots
+        c.strokeStyle = '#142217';
+        c.lineWidth = 1.5;
+        // Root 1 (left side wrap)
+        c.beginPath();
+        c.moveTo(cx - rx, cy + height * 0.7);
+        c.lineTo(cx - rx * 0.6, cy + height * 0.5);
+        c.lineTo(cx - rx * 0.35, cy + ry * 0.7 + 6);
+        c.lineTo(cx - rx * 0.5, cy + ry * 0.3);
+        c.stroke();
+        // Root 2 (right side wrap)
+        c.beginPath();
+        c.moveTo(cx, cy + ry + height - 2);
+        c.lineTo(cx + rx * 0.2, cy + ry + height * 0.5);
+        c.lineTo(cx + rx * 0.45, cy + ry * 0.8 + 8);
+        c.lineTo(cx + rx * 0.7, cy + height * 0.4);
+        c.lineTo(cx + rx, cy + height * 0.25);
+        c.stroke();
+        // Root 3 (top ridge creep)
+        c.beginPath();
+        c.moveTo(cx, cy + ry);
+        c.lineTo(cx + rx * 0.15, cy + ry * 0.3);
+        c.lineTo(cx + rx * 0.3, cy - ry * 0.1);
+        c.stroke();
+
+        // 2. Purple/green fungus dots
+        // Top face cluster
+        c.fillStyle = '#84cc16';
+        c.fillRect(cx - rx * 0.35, cy - ry * 0.25, 2, 2);
+        c.fillRect(cx - rx * 0.25, cy - ry * 0.15, 3, 2);
+        c.fillStyle = '#c084fc';
+        c.fillRect(cx - rx * 0.3, cy - ry * 0.1, 2, 2);
+        c.fillRect(cx + rx * 0.35, cy + ry * 0.1, 3, 3);
+        c.fillStyle = '#4ade80';
+        c.fillRect(cx + rx * 0.25, cy + ry * 0.2, 2, 2);
+        // Left face cluster
+        c.fillStyle = '#7e22ce';
+        c.fillRect(cx - rx * 0.65, cy + height * 0.4, 3, 3);
+        c.fillStyle = '#84cc16';
+        c.fillRect(cx - rx * 0.55, cy + height * 0.45, 2, 2);
+        // Right face cluster
+        c.fillStyle = '#c084fc';
+        c.fillRect(cx + rx * 0.3, cy + ry + 10, 2, 2);
+        c.fillStyle = '#84cc16';
+        c.fillRect(cx + rx * 0.4, cy + ry + 14, 3, 2);
+        c.fillRect(cx + rx * 0.6, cy + height * 0.6, 2, 2);
+        c.restore();
+      } else {
+        // Stage 5: Toxic necrotic purple/green + deep corruption veins & pustules
+        c.save();
+        c.strokeStyle = '#022c22';
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(cx - rx * 0.5, cy + 2);
+        c.lineTo(cx - rx * 0.3, cy + ry * 0.6 + 6);
+        c.lineTo(cx - rx * 0.4, cy + height * 0.8);
+        c.stroke();
+
+        c.strokeStyle = '#581c87';
+        c.beginPath();
+        c.moveTo(cx + rx * 0.15, cy + ry * 0.7 + 3);
+        c.lineTo(cx + rx * 0.4, cy + ry * 0.3 + 9);
+        c.lineTo(cx + rx * 0.35, cy + height * 0.85);
+        c.stroke();
+
+        // Radioactive necrotic pustules
+        c.fillStyle = '#a3e635';
+        c.fillRect(cx - rx * 0.25, cy + ry * 0.5 + 4, 3, 3);
+        c.fillStyle = '#c084fc';
+        c.fillRect(cx + rx * 0.35, cy + height * 0.5, 3, 3);
+        c.restore();
+      }
+
+      // 5. DRAW PIPS
+      drawDicePips(c, cx, cy, rx, ry, weight, pipColor);
+
+      // 6. DRAW TASK LABEL (WITH BLINKING RED OVERDUE STATE)
+      drawDiceLabel(c, cx, cy + ry, rx, height, label, rot);
+
+      c.restore();
+    }
+
+    /**
+     * Draws pips with rot tint
+     */
+    function drawDicePips(c, cx, cy, rx, ry, count, color) {
+      c.fillStyle = color;
+      const s = 4;
+
+      if (count === 1) {
+        c.fillRect(cx - 2, cy - 2, s, s);
+      } else if (count === 2) {
+        c.fillRect(cx - rx * 0.4, cy - ry * 0.4, s, s);
+        c.fillRect(cx + rx * 0.4 - 2, cy + ry * 0.4 - 2, s, s);
+      } else if (count === 3) {
+        c.fillRect(cx - 2, cy - 2, s, s);
+        c.fillRect(cx - rx * 0.4, cy - ry * 0.4, s, s);
+        c.fillRect(cx + rx * 0.4 - 2, cy + ry * 0.4 - 2, s, s);
+      } else if (count === 4) {
+        c.fillRect(cx - rx * 0.45, cy, s, s);
+        c.fillRect(cx + rx * 0.45 - 2, cy, s, s);
+        c.fillRect(cx, cy - ry * 0.45, s, s);
+        c.fillRect(cx, cy + ry * 0.45 - 2, s, s);
+      } else if (count >= 5) {
+        c.fillRect(cx - 2, cy - 2, s, s);
+        c.fillRect(cx - rx * 0.45, cy - ry * 0.35, s, s);
+        c.fillRect(cx + rx * 0.45 - 2, cy - ry * 0.35, s, s);
+        c.fillRect(cx - rx * 0.45, cy + ry * 0.35 - 2, s, s);
+        c.fillRect(cx + rx * 0.45 - 2, cy + ry * 0.35 - 2, s, s);
+      }
+    }
+
+    /**
+     * Draws truncated task label with robust Unicode / Vietnamese support
+     * Blinking red label when overdue (rot >= 1.0)
+     */
+    function drawDiceLabel(c, cx, cy, rx, height, title, rot) {
+      if (!title) return;
+      // Strip unprintable control codes but keep Unicode characters & spaces
+      let clean = title.toUpperCase().replace(/[\u0000-\u001f\u007f]/g, '').trim();
+      if (!clean) return;
+
+      c.save();
+      c.font = '6px "Press Start 2P"';
+      const maxTextWidth = rx * 1.5;
+      const measure = (str) => (c.measureText ? c.measureText(str).width : str.length * 6);
+
+      // Truncate dynamically using font metrics
+      if (measure(clean) > maxTextWidth) {
+        while (clean.length > 1 && measure(clean + '..') > maxTextWidth) {
+          clean = clean.slice(0, -1);
+        }
+        clean = clean + '..';
+      }
+
+      // Color mapping & overdue blinking
+      if (rot >= 1.0) {
+        // Blinking red label when overdue (rot >= 1.0)
+        const isBlinkRed = (Math.floor(Date.now() / 350) % 2 === 0);
+        c.fillStyle = isBlinkRed ? '#ef4444' : '#ffffff';
+      } else if (rot >= 0.80) {
+        c.fillStyle = '#a3e635'; // Stage 5 non-overdue: toxic lime
+      } else if (rot >= 0.60) {
+        c.fillStyle = '#a3e635'; // Stage 4: moss spore lime
+      } else if (rot >= 0.40) {
+        c.fillStyle = '#f8fafc'; // Stage 3: crisp white text on cracked stone
+      } else if (rot >= 0.20) {
+        c.fillStyle = '#2b291d'; // Stage 2: dark sepia on sandy yellow
+      } else {
+        c.fillStyle = '#111827'; // Stage 1: obsidian on pristine ivory
+      }
+
+      c.textAlign = 'center';
+      c.fillText(clean, cx, cy + (height * 0.65));
+      c.restore();
+    }
+
+    /**
+     * Draws a pulsing retro overdue alert banner above an overdue die
+     */
+    function drawOverdueDieBanner(c, cx, cy, width, ry) {
+      const now = Date.now();
+      const blink = Math.floor(now / 220) % 2 === 0;
+      const bannerW = Math.max(68, width * 0.85);
+      const bannerH = 11;
+      const bannerX = cx - bannerW / 2;
+      const bannerY = cy - ry - 13;
+
+      c.save();
+      // Semi-transparent dark crimson plate
+      c.fillStyle = 'rgba(20, 5, 8, 0.92)';
+      c.fillRect(bannerX, bannerY, bannerW, bannerH);
+
+      // Pulsing retro red/crimson border
+      c.strokeStyle = blink ? 'rgba(255, 34, 34, 0.95)' : 'rgba(168, 20, 20, 0.7)';
+      c.lineWidth = 1;
+      c.strokeRect(bannerX, bannerY, bannerW, bannerH);
+
+      // Blinking text '! QUÁ HẠN !'
+      c.font = '6px "Press Start 2P"';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillStyle = blink ? '#ff2222' : '#ff9999';
+      c.fillText('! QUÁ HẠN !', cx, bannerY + bannerH / 2 + 1);
+
+      c.restore();
+    }
+
+    /**
+     * Resolves current time period into 4 discrete phases based on local hour
+     * Dawn: 6:00 - 10:00
+     * Day: 10:00 - 17:00
+     * Sunset: 17:00 - 20:00
+     * Night: 20:00 - 6:00
+     */
+    function getZenTimePeriod() {
+      const hour = (window.zenSimulatedHour !== null && window.zenSimulatedHour !== undefined)
+        ? window.zenSimulatedHour
+        : new Date().getHours();
+
+      if (hour >= 6 && hour < 10) return 'dawn';     // 6:00 - 10:00
+      if (hour >= 10 && hour < 17) return 'day';     // 10:00 - 17:00
+      if (hour >= 17 && hour < 20) return 'sunset';  // 17:00 - 20:00
+      return 'night';                                // 20:00 - 6:00
+    }
+
+    // Public test inspection hooks on window
+    window.setZenGardenTime = function(hour) {
+      window.zenSimulatedHour = (hour !== null && hour !== undefined) ? parseInt(hour, 10) : null;
+    };
+    window.getZenGardenPeriod = function() {
+      return getZenTimePeriod();
+    };
+    window.isZenGardenActive = function() {
+      return diceStack.length === 0 && (hasHadTasks || hasClearedAll);
+    };
+    window.getVisualTier = function() {
+      return visualTier;
+    };
+    window.getAverageRot = function() {
+      return calculateAverageRot();
+    };
+    window.triggerZenGarden = function() {
+      diceStack = [];
+      hasHadTasks = true;
+      hasClearedAll = true;
+      visualTier = 0.0;
+    };
+
+    /**
+     * Calculates the dynamic abyssal background color and hue
+     * Shifting smoothly: Base Abyssal Slate (216°) -> Sickly Green (142°) -> Necrotic Purple (282°) -> Blood Crimson (352°+)
+     * @param {number} rot - The smoothed average rot factor (unclamped >= 0.0)
+     * @param {number} now - Timestamp for overdue heartbeat pulse
+     */
+    function getAbyssalRotColor(rot, now = 0) {
+      let r, g, b, h, s, l;
+
+      if (rot <= 0.0) {
+        // Pristine Cold Void (#121417)
+        r = 18; g = 20; b = 23; h = 216; s = 12; l = 8;
+      } else if (rot < 0.35) {
+        // Base Void -> Sickly Eldritch Moss Green (#0e1912)
+        const t = rot / 0.35;
+        r = 18 + (14 - 18) * t;
+        g = 20 + (25 - 20) * t;
+        b = 23 + (18 - 23) * t;
+        h = 216 + (142 - 216) * t;
+        s = 12 + (28 - 12) * t;
+        l = 8 + (7.6 - 8) * t;
+      } else if (rot < 0.70) {
+        // Sickly Green -> Diseased Necrotic Purple (#190d1e)
+        const t = (rot - 0.35) / 0.35;
+        r = 14 + (25 - 14) * t;
+        g = 25 + (13 - 25) * t;
+        b = 18 + (30 - 18) * t;
+        h = 142 + (282 - 142) * t;
+        s = 28 + (39 - 28) * t;
+        l = 7.6 + (8.4 - 7.6) * t;
+      } else if (rot < 1.0) {
+        // Necrotic Purple -> Blood Crimson (#26090d)
+        const t = (rot - 0.70) / 0.30;
+        r = 25 + (38 - 25) * t;
+        g = 13 + (9 - 13) * t;
+        b = 30 + (13 - 30) * t;
+        h = 282 + (352 - 282) * t;
+        s = 39 + (62 - 39) * t;
+        l = 8.4 + (9.2 - 8.4) * t;
+      } else {
+        // rot >= 1.0 (Overdue Crisis: Deepening Arterial Crimson + Visceral Heartbeat Pulse)
+        const overdueFactor = Math.min(1.5, rot - 1.0);
+        const t = overdueFactor / 1.5;
+        const pulse = Math.sin(now * 0.005) * (0.6 + t * 1.4);
+
+        r = Math.min(60, Math.floor(38 + t * 20 + (pulse > 0 ? pulse * 3 : 0)));
+        g = Math.max(4, Math.floor(9 - t * 4));
+        b = Math.max(6, Math.floor(13 - t * 6));
+        h = 352 + Math.floor(t * 5);
+        s = Math.min(85, Math.floor(62 + t * 20));
+        l = Math.min(15, Math.max(6, 9.2 + t * 2.5 + pulse * 0.6));
+      }
+
+      r = Math.round(r);
+      g = Math.round(g);
+      b = Math.round(b);
+      h = Math.round(h);
+      s = Math.round(s);
+      l = Number(l.toFixed(1));
+
+      return {
+        r, g, b,
+        hue: h,
+        sat: s,
+        light: l,
+        cssHsl: `hsl(${h}, ${s}%, ${l}%)`,
+        cssRgb: `rgb(${r}, ${g}, ${b})`
+      };
+    }
+
+    /**
+     * Calculates smooth opacity multiplier for tier k (1 to 10)
+     * Guarantees smooth de-escalation without popping or jarring snaps.
+     * @param {number} k - Tier index (1 to 10)
+     * @returns {number} Opacity between 0.0 and 1.0
+     */
+    function getTierAlpha(k) {
+      if (visualTier >= k) return 1.0;
+      if (visualTier <= k - 1) return 0.0;
+      return Math.max(0.0, Math.min(1.0, visualTier - (k - 1)));
+    }
+
+    /**
+     * Renders Escalating Lovecraftian Abyss Background Layers (Tiers 1 to 10)
+     * With smooth alpha transitions based on getTierAlpha(k)
+     */
+    function renderLovecraftianAbyss(c, now, overallRot) {
+      // Tier 1: Void (faint abyssal haze)
+      const a1 = getTierAlpha(1);
+      if (a1 > 0.01) {
+        c.save();
+        c.globalAlpha = a1;
+        const hazeX1 = 200 + Math.sin(now * 0.001) * 60;
+        const hazeY1 = 160 + Math.cos(now * 0.0012) * 40;
+        const grad1 = c.createRadialGradient(hazeX1, hazeY1, 20, hazeX1, hazeY1, 180);
+        grad1.addColorStop(0, 'rgba(30, 27, 75, 0.45)');
+        grad1.addColorStop(0.7, 'rgba(15, 23, 42, 0.25)');
+        grad1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        c.fillStyle = grad1;
+        c.fillRect(0, 0, canvas.width, canvas.height);
+        c.restore();
+      }
+
+      // Tier 2: Cold Dust (drifting cold ash particles)
+      const a2 = getTierAlpha(2);
+      if (a2 > 0.01) {
+        c.save();
+        c.globalAlpha = a2;
+        for (let i = 0; i < coldDustParticles.length; i++) {
+          const p = coldDustParticles[i];
+          p.x += p.vx + Math.sin(now * 0.002 + p.y * 0.05) * 0.2;
+          p.y += p.vy;
+          if (p.y > 320) { p.y = 0; p.x = Math.random() * 400; }
+          if (p.x < 0) { p.x = 400; }
+          c.fillStyle = `rgba(186, 198, 214, ${p.alpha})`;
+          c.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
+        }
+        c.restore();
+      }
+
+      // Tier 3: Frost Cracks (crystalline frost lines across canvas borders)
+      const a3 = getTierAlpha(3);
+      if (a3 > 0.01) {
+        c.save();
+        c.globalAlpha = a3;
+        c.strokeStyle = '#38bdf8';
+        c.lineWidth = 1;
+        c.shadowColor = '#0284c7';
+        c.shadowBlur = 3;
+        for (let i = 0; i < FROST_CRACKS.length; i++) {
+          const crack = FROST_CRACKS[i];
+          c.beginPath();
+          c.moveTo(crack[0].x, crack[0].y);
+          for (let j = 1; j < crack.length; j++) {
+            c.lineTo(crack[j].x, crack[j].y);
+          }
+          c.stroke();
+        }
+        c.fillStyle = 'rgba(186, 230, 253, 0.15)';
+        c.fillRect(0, 0, 400, 2);
+        c.fillRect(0, 0, 2, 320);
+        c.fillRect(398, 0, 2, 320);
+        c.restore();
+      }
+
+      // Tier 4: Sprouting Thorns (thorny vines emerging from floor/edges)
+      const a4 = getTierAlpha(4);
+      if (a4 > 0.01) {
+        c.save();
+        c.globalAlpha = a4;
+        c.strokeStyle = '#1e1b18';
+        c.fillStyle = '#262626';
+        c.lineWidth = 2;
+        for (let i = 0; i < SPROUTING_THORNS.length; i++) {
+          const t = SPROUTING_THORNS[i];
+          const sway = Math.sin(now * 0.003 + i) * 2;
+          const tipX = t.x + sway;
+          const tipY = GROUND_Y - t.h;
+          c.beginPath();
+          c.moveTo(t.x, GROUND_Y);
+          c.quadraticCurveTo(t.x + (t.dir * 6), GROUND_Y - (t.h * 0.5), tipX, tipY);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(t.x + (t.dir * 3), GROUND_Y - (t.h * 0.4));
+          c.lineTo(t.x + (t.dir * 8), GROUND_Y - (t.h * 0.45));
+          c.lineTo(t.x + (t.dir * 2), GROUND_Y - (t.h * 0.55));
+          c.fill();
+        }
+        c.restore();
+      }
+
+      // Tier 5: Creeping Vines (pulsing purple eldritch vines climbing walls)
+      const a5 = getTierAlpha(5);
+      if (a5 > 0.01) {
+        c.save();
+        c.globalAlpha = a5;
+        drawCorruptionRoots(c, Math.max(overallRot, 0.55));
+        c.restore();
+      }
+
+      // Tier 6: Toxic Spores (floating green bioluminescent spores)
+      const a6 = getTierAlpha(6);
+      if (a6 > 0.01) {
+        c.save();
+        c.globalAlpha = a6;
+        for (let i = 0; i < toxicSpores.length; i++) {
+          const s = toxicSpores[i];
+          s.x += s.vx + Math.sin(now * 0.002 + s.pulseOffset) * 0.3;
+          s.y += s.vy;
+          if (s.y < 0) { s.y = 320; s.x = Math.random() * 400; }
+          if (s.x < 0) { s.x = 400; }
+          if (s.x > 400) { s.x = 0; }
+          const glow = 0.5 + Math.sin(now * 0.005 + s.pulseOffset) * 0.4;
+          c.fillStyle = `rgba(132, 204, 22, ${glow * 0.4})`;
+          c.fillRect(Math.floor(s.x) - 1, Math.floor(s.y) - 1, s.size + 2, s.size + 2);
+          c.fillStyle = s.color;
+          c.fillRect(Math.floor(s.x), Math.floor(s.y), s.size, s.size);
+        }
+        c.restore();
+      }
+
+      // Tier 7: Blood Veins (branching crimson vascular patterns)
+      const a7 = getTierAlpha(7);
+      if (a7 > 0.01) {
+        c.save();
+        c.globalAlpha = a7;
+        const pulse = 0.6 + (Math.sin(now * 0.007) > 0.5 ? 0.35 : 0);
+        c.strokeStyle = `rgba(185, 28, 28, ${pulse})`;
+        c.lineWidth = 1.5;
+        for (let i = 0; i < BLOOD_VEINS.length; i++) {
+          const branch = BLOOD_VEINS[i];
+          c.beginPath();
+          c.moveTo(branch[0].x, branch[0].y);
+          for (let j = 1; j < branch.length; j++) {
+            c.lineTo(branch[j].x, branch[j].y);
+          }
+          c.stroke();
+        }
+        c.restore();
+      }
+
+      // Tier 8: Demon Eyes (unblinking demonic eyes opening in dark background)
+      const a8 = getTierAlpha(8);
+      if (a8 > 0.01) {
+        c.save();
+        c.globalAlpha = a8;
+        for (let i = 0; i < DEMON_EYES.length; i++) {
+          const eye = DEMON_EYES[i];
+          const cycle = (now + eye.blinkOffset) % eye.blinkPeriod;
+          const isBlinking = cycle < 140;
+          if (isBlinking) {
+            c.strokeStyle = '#000000';
+            c.lineWidth = 1.5;
+            c.beginPath();
+            c.moveTo(eye.x - eye.rx, eye.y);
+            c.lineTo(eye.x + eye.rx, eye.y);
+            c.stroke();
+          } else {
+            c.fillStyle = '#05020a';
+            c.beginPath();
+            c.ellipse(eye.x, eye.y, eye.rx + 1, eye.ry + 1, 0, 0, Math.PI * 2);
+            c.fill();
+            c.fillStyle = '#f59e0b';
+            c.beginPath();
+            c.ellipse(eye.x, eye.y, eye.rx, eye.ry, 0, 0, Math.PI * 2);
+            c.fill();
+
+            let pupilOffsetX = 0;
+            let pupilOffsetY = 0;
+            if (mousePos.x > 0 && mousePos.y > 0) {
+              const dx = mousePos.x - eye.x;
+              const dy = mousePos.y - eye.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist > 0) {
+                pupilOffsetX = Math.max(-2, Math.min(2, (dx / dist) * 2));
+                pupilOffsetY = Math.max(-1, Math.min(1, (dy / dist) * 1));
+              }
+            }
+            c.fillStyle = '#000000';
+            c.beginPath();
+            c.ellipse(eye.x + pupilOffsetX, eye.y + pupilOffsetY, 1.5, eye.ry * 0.8, 0, 0, Math.PI * 2);
+            c.fill();
+          }
+        }
+        c.restore();
+      }
+
+      // Tier 9: Abyssal Eclipse (dark coronal eclipse with pulsing aura)
+      const a9 = getTierAlpha(9);
+      if (a9 > 0.01) {
+        c.save();
+        c.globalAlpha = a9;
+        const eclipseX = 200;
+        const eclipseY = 70;
+        const baseRadius = 22;
+        const pulse = Math.sin(now * 0.004) * 2.5;
+
+        const coronaGrad = c.createRadialGradient(eclipseX, eclipseY, baseRadius, eclipseX, eclipseY, baseRadius + 20 + pulse);
+        coronaGrad.addColorStop(0, 'rgba(168, 85, 247, 0.7)');
+        coronaGrad.addColorStop(0.5, 'rgba(192, 38, 211, 0.35)');
+        coronaGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        c.fillStyle = coronaGrad;
+        c.beginPath();
+        c.arc(eclipseX, eclipseY, baseRadius + 22 + pulse, 0, Math.PI * 2);
+        c.fill();
+
+        c.strokeStyle = 'rgba(236, 72, 153, 0.4)';
+        c.lineWidth = 1;
+        for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+          const rayLen = 28 + Math.sin(now * 0.006 + a * 3) * 6;
+          c.beginPath();
+          c.moveTo(eclipseX + Math.cos(a) * (baseRadius + 2), eclipseY + Math.sin(a) * (baseRadius + 2));
+          c.lineTo(eclipseX + Math.cos(a) * rayLen, eclipseY + Math.sin(a) * rayLen);
+          c.stroke();
+        }
+
+        c.fillStyle = '#090514';
+        c.beginPath();
+        c.arc(eclipseX, eclipseY, baseRadius, 0, Math.PI * 2);
+        c.fill();
+        c.strokeStyle = '#c084fc';
+        c.lineWidth = 1;
+        c.stroke();
+        c.restore();
+      }
+
+      // Tier 10: Pandemonium Overload (chaotic eldritch storm, lightning flashes, reality tearing)
+      const a10 = getTierAlpha(10);
+      if (a10 > 0.01) {
+        c.save();
+        c.globalAlpha = a10;
+        const sliceY = (Math.floor(now / 120) * 37) % 300;
+        const sliceH = 8 + (Math.floor(now / 90) % 12);
+        c.fillStyle = 'rgba(236, 72, 153, 0.2)';
+        c.fillRect(0, sliceY, 400, sliceH);
+        c.fillStyle = 'rgba(6, 182, 212, 0.15)';
+        c.fillRect(4, sliceY + 2, 392, sliceH - 4);
+
+        const flashSub = (now % 2800);
+        if (flashSub < 60) {
+          c.fillStyle = 'rgba(243, 232, 255, 0.35)';
+          c.fillRect(0, 0, canvas.width, canvas.height);
+          c.strokeStyle = '#ffffff';
+          c.lineWidth = 2;
+          c.beginPath();
+          c.moveTo(200, 0);
+          c.lineTo(190, 45);
+          c.lineTo(215, 90);
+          c.lineTo(195, 140);
+          c.lineTo(205, 190);
+          c.stroke();
+        }
+        c.restore();
+      }
+    }
+
+    /**
+     * Renders the Peaceful Pixel Zen Garden Victory State with Dynamic 4-Period Day/Night Lighting
+     */
+    function renderZenGarden(c) {
+      const now = Date.now();
+      const period = getZenTimePeriod();
+      const currentHour = (window.zenSimulatedHour !== null && window.zenSimulatedHour !== undefined)
+        ? window.zenSimulatedHour
+        : new Date().getHours();
+      const isDaytime = (period === 'dawn' || period === 'day');
+
+      // ==========================================
+      // 1. SKY GRADIENT & CELESTIAL BODIES
+      // ==========================================
+      const skyGrad = c.createLinearGradient(0, 0, 0, 240);
+      if (period === 'dawn') {
+        skyGrad.addColorStop(0, '#ea580c');
+        skyGrad.addColorStop(0.4, '#fb923c');
+        skyGrad.addColorStop(1, '#fed7aa');
+      } else if (period === 'day') {
+        skyGrad.addColorStop(0, '#0284c7');
+        skyGrad.addColorStop(0.5, '#38bdf8');
+        skyGrad.addColorStop(1, '#bae6fd');
+      } else if (period === 'sunset') {
+        skyGrad.addColorStop(0, '#4a044e');
+        skyGrad.addColorStop(0.35, '#9d174d');
+        skyGrad.addColorStop(0.7, '#ea580c');
+        skyGrad.addColorStop(1, '#fde047');
+      } else {
+        // night
+        skyGrad.addColorStop(0, '#020617');
+        skyGrad.addColorStop(0.5, '#0f172a');
+        skyGrad.addColorStop(1, '#1e1b4b');
+      }
+      c.fillStyle = skyGrad;
+      c.fillRect(0, 0, canvas.width, 240);
+
+      // Celestial details per period
+      if (period === 'dawn') {
+        // Low Golden Morning Sun (x=90, y=125)
+        c.fillStyle = 'rgba(254, 240, 138, 0.25)';
+        c.beginPath();
+        c.arc(90, 125, 22, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#fef08a';
+        c.beginPath();
+        c.arc(90, 125, 12, 0, Math.PI * 2);
+        c.fill();
+
+        // Gentle Morning Sunbeams (angled translucent polygons)
+        c.save();
+        const beamPulse = 0.07 + Math.sin(now * 0.002) * 0.02;
+        c.fillStyle = `rgba(254, 240, 138, ${beamPulse})`;
+        c.beginPath();
+        c.moveTo(90, 125);
+        c.lineTo(160, 260);
+        c.lineTo(220, 260);
+        c.closePath();
+        c.fill();
+        c.beginPath();
+        c.moveTo(90, 125);
+        c.lineTo(260, 270);
+        c.lineTo(340, 270);
+        c.closePath();
+        c.fill();
+        c.restore();
+      } else if (period === 'day') {
+        // Radiant High Sun (x=330, y=42)
+        c.fillStyle = '#fde047';
+        c.fillRect(324, 36, 14, 14);
+        c.fillStyle = '#facc15';
+        c.fillRect(320, 41, 4, 4);
+        c.fillRect(338, 41, 4, 4);
+        c.fillRect(329, 32, 4, 4);
+        c.fillRect(329, 50, 4, 4);
+
+        // Drifting Cumulus Clouds
+        const c1x = (now * 0.015) % 460 - 50;
+        const c2x = ((now * 0.01) + 200) % 460 - 50;
+        c.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        c.fillRect(c1x, 48, 34, 10);
+        c.fillRect(c1x + 6, 42, 22, 6);
+        c.fillRect(c2x, 70, 28, 8);
+        c.fillRect(c2x + 4, 65, 18, 5);
+      } else if (period === 'sunset') {
+        // Sinking Twilight Sun (x=200, y=200)
+        c.fillStyle = 'rgba(254, 215, 170, 0.3)';
+        c.beginPath();
+        c.arc(200, 200, 24, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#fde047';
+        c.beginPath();
+        c.arc(200, 200, 14, 0, Math.PI * 2);
+        c.fill();
+      } else {
+        // Night: Silver Crescent Moon & Twinkling Stars
+        c.save();
+        c.fillStyle = 'rgba(226, 232, 240, 0.15)';
+        c.beginPath();
+        c.arc(336, 42, 16, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#f8fafc';
+        c.beginPath();
+        c.arc(336, 42, 10, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#0f172a';
+        c.beginPath();
+        c.arc(332, 40, 9, 0, Math.PI * 2);
+        c.fill();
+
+        // 10 Twinkling Pixel Stars
+        c.fillStyle = '#f8fafc';
+        const starCoords = [
+          { x: 30, y: 35 }, { x: 75, y: 65 }, { x: 130, y: 30 },
+          { x: 180, y: 80 }, { x: 235, y: 40 }, { x: 280, y: 70 },
+          { x: 310, y: 25 }, { x: 375, y: 45 }, { x: 110, y: 110 },
+          { x: 260, y: 120 }
+        ];
+        starCoords.forEach((s, idx) => {
+          const isTwinkle = ((Math.floor(now / 350) + idx) % 3 !== 0);
+          if (isTwinkle) {
+            c.fillRect(s.x, s.y, 2, 2);
+          }
+        });
+        c.restore();
+      }
+
+      // ==========================================
+      // 2. RAKED SAND BED & KARESANSUI RIPPLES
+      // ==========================================
+      const SAND_TOP = 230;
+      let sandBase, sandGroove, sandHighlight;
+
+      if (period === 'dawn') {
+        sandBase = '#d7ba8d';
+        sandGroove = '#bf9b68';
+        sandHighlight = '#fef08a';
+      } else if (period === 'day') {
+        sandBase = '#f5ebd7';
+        sandGroove = '#ded0b6';
+        sandHighlight = '#ffffff';
+      } else if (period === 'sunset') {
+        sandBase = '#bfa084';
+        sandGroove = '#9c7a60';
+        sandHighlight = '#fed7aa';
+      } else {
+        // night: silver moonlight on sand
+        sandBase = '#1e293b';
+        sandGroove = '#0f172a';
+        sandHighlight = '#94a3b8';
+      }
+
+      // Base sand floor
+      c.fillStyle = sandBase;
+      c.fillRect(0, SAND_TOP, canvas.width, 320 - SAND_TOP);
+
+      // Concentric sand ripple rings around rock triad (x=120, y=265)
+      c.save();
+      c.lineWidth = 1.5;
+      c.strokeStyle = sandGroove;
+      for (let r = 1; r <= 3; r++) {
+        c.beginPath();
+        c.ellipse(120, 265, 26 + r * 10, 10 + r * 4, 0, 0, Math.PI * 2);
+        c.stroke();
+        if (period === 'night') {
+          c.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+          c.stroke();
+        }
+      }
+
+      // Concentric sand ripple rings around secondary rocks (x=275, y=275)
+      for (let r = 1; r <= 2; r++) {
+        c.beginPath();
+        c.ellipse(275, 275, 20 + r * 8, 8 + r * 3, 0, 0, Math.PI * 2);
+        c.stroke();
+      }
+
+      // Parallel wavy raked lines across ground
+      c.lineWidth = 1;
+      for (let y = SAND_TOP + 8; y < 320; y += 7) {
+        c.strokeStyle = sandGroove;
+        c.beginPath();
+        for (let x = 0; x <= 400; x += 10) {
+          const wave = Math.sin(x * 0.04 + y) * 1.2;
+          if (x === 0) c.moveTo(x, y + wave);
+          else c.lineTo(x, y + wave);
+        }
+        c.stroke();
+
+        // Moonlight sheen on ridge tops
+        if (period === 'night') {
+          c.strokeStyle = 'rgba(203, 213, 225, 0.3)';
+          c.beginPath();
+          for (let x = 0; x <= 400; x += 10) {
+            const wave = Math.sin(x * 0.04 + y) * 1.2;
+            if (x === 0) c.moveTo(x, y + wave - 1);
+            else c.lineTo(x, y + wave - 1);
+          }
+          c.stroke();
+        }
+      }
+      c.restore();
+
+      // ==========================================
+      // 3. MEDITATIVE ROCK TRIAD (San-zon-seki)
+      // ==========================================
+      function drawZenStone(x, y, w, h, mossColor) {
+        c.save();
+        c.fillStyle = isDaytime ? '#475569' : '#1e293b';
+        c.fillRect(x - w / 2, y - h, w, h);
+        c.fillStyle = isDaytime ? '#64748b' : '#334155';
+        c.fillRect(x - w / 2 + 2, y - h + 2, w - 4, h / 2);
+        c.strokeStyle = '#0f172a';
+        c.lineWidth = 1.5;
+        c.strokeRect(x - w / 2, y - h, w, h);
+
+        // Moss accent at base
+        c.fillStyle = mossColor;
+        c.fillRect(x - w / 2 - 2, y - 3, w + 4, 3);
+        c.restore();
+      }
+
+      const mossHue = (period === 'night' || period === 'sunset') ? '#14532d' : '#65a30d';
+      drawZenStone(120, 265, 20, 28, mossHue); // Center monolith
+      drawZenStone(105, 268, 14, 14, mossHue); // Left attendant stone
+      drawZenStone(135, 270, 16, 10, mossHue); // Right flat stone
+      drawZenStone(275, 278, 16, 12, mossHue); // Secondary boulder
+
+      // ==========================================
+      // 4. JAPANESE STONE LANTERN (Tōrō)
+      // ==========================================
+      const lx = 330;
+      const ly = 245;
+
+      c.save();
+      const stoneColor = isDaytime ? '#334155' : '#0f172a';
+      const stoneLight = isDaytime ? '#475569' : '#1e293b';
+
+      // Base platform & pillar
+      c.fillStyle = stoneColor;
+      c.fillRect(lx - 10, ly - 4, 20, 4); // Base
+      c.fillRect(lx - 4, ly - 20, 8, 16);  // Post
+      c.fillRect(lx - 11, ly - 24, 22, 4); // Platform
+
+      // Light chamber (Hibukuro)
+      c.fillStyle = '#0f172a';
+      c.fillRect(lx - 7, ly - 36, 14, 12);
+
+      // Lantern illumination
+      if (period === 'sunset' || period === 'night' || period === 'dawn') {
+        const flicker = Math.sin(now * 0.01) * 2;
+        const fireAlpha = (period === 'night') ? 0.95 : 0.75;
+        c.fillStyle = `rgba(251, 191, 36, ${fireAlpha})`;
+        c.fillRect(lx - 4, ly - 33, 8, 7);
+        c.fillStyle = '#ffffff';
+        c.fillRect(lx - 2 + (flicker > 0 ? 1 : 0), ly - 31, 3, 3);
+
+        // Radial ground glow for night
+        if (period === 'night') {
+          const glowGrad = c.createRadialGradient(lx, ly - 28, 4, lx, ly, 45);
+          glowGrad.addColorStop(0, 'rgba(251, 191, 36, 0.35)');
+          glowGrad.addColorStop(0.5, 'rgba(245, 158, 11, 0.12)');
+          glowGrad.addColorStop(1, 'rgba(245, 158, 11, 0.0)');
+          c.fillStyle = glowGrad;
+          c.beginPath();
+          c.ellipse(lx, ly, 45, 18, 0, 0, Math.PI * 2);
+          c.fill();
+        }
+      } else {
+        // Day unlit window
+        c.fillStyle = '#475569';
+        c.fillRect(lx - 4, ly - 33, 8, 7);
+      }
+
+      // Roof & Jewel Finial
+      c.fillStyle = stoneLight;
+      c.beginPath();
+      c.moveTo(lx - 14, ly - 36);
+      c.lineTo(lx + 14, ly - 36);
+      c.lineTo(lx + 6, ly - 44);
+      c.lineTo(lx - 6, ly - 44);
+      c.closePath();
+      c.fill();
+      c.stroke();
+      c.fillStyle = stoneColor;
+      c.fillRect(lx - 3, ly - 48, 6, 4); // Finial
+      c.restore();
+
+      // ==========================================
+      // 5. VERDANT BAMBOO GROVES (Take)
+      // ==========================================
+      function drawBambooStalk(bx, by, stalkHeight, isLeft) {
+        c.save();
+        const bColor = isDaytime ? '#15803d' : '#064e3b';
+        const bNode = isDaytime ? '#166534' : '#022c22';
+        const bLeaf = isDaytime ? '#22c55e' : '#059669';
+
+        c.fillStyle = bColor;
+        c.fillRect(bx, by - stalkHeight, 5, stalkHeight);
+
+        // Node joints
+        c.fillStyle = bNode;
+        for (let ny = by; ny > by - stalkHeight; ny -= 22) {
+          c.fillRect(bx - 1, ny - 2, 7, 2);
+
+          // Angled bamboo leaf sprigs
+          c.fillStyle = bLeaf;
+          const dir = isLeft ? 1 : -1;
+          c.beginPath();
+          c.moveTo(bx + 2, ny - 1);
+          c.lineTo(bx + 2 + dir * 10, ny - 6);
+          c.lineTo(bx + 2 + dir * 6, ny - 1);
+          c.closePath();
+          c.fill();
+          c.fillStyle = bNode;
+        }
+        c.restore();
+      }
+
+      drawBambooStalk(12, 260, 160, true);
+      drawBambooStalk(22, 270, 180, true);
+      drawBambooStalk(380, 265, 170, false);
+      drawBambooStalk(390, 275, 190, false);
+
+      // ==========================================
+      // 6. BLOOMING SAKURA PETALS (Drifting)
+      // ==========================================
+      c.save();
+      const petalColor = (period === 'sunset') ? '#fda4af' : ((period === 'night') ? '#f472b6' : '#fbcfe8');
+      zenPetals.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        const sway = Math.sin(now * p.swaySpeed + p.seed) * 1.5;
+
+        c.fillStyle = petalColor;
+        c.fillRect(Math.floor(p.x + sway), Math.floor(p.y), p.size, p.size);
+
+        if (p.x > 415) p.x = -10;
+        if (p.y > 325) p.y = -5;
+      });
+      c.restore();
+
+      // ==========================================
+      // 7. GLOWING FIREFLIES (Night & Dusk)
+      // ==========================================
+      if (period === 'night' || period === 'sunset') {
+        c.save();
+        zenFireflies.forEach(f => {
+          f.x += f.vx;
+          f.y += f.vy;
+          if (f.x < 30 || f.x > 370) f.vx *= -1;
+          if (f.y < 120 || f.y > 280) f.vy *= -1;
+
+          const alphaPulse = 0.35 + 0.45 * Math.sin(now * 0.005 + f.phase);
+          c.fillStyle = `rgba(163, 230, 53, ${alphaPulse * 0.4})`;
+          c.beginPath();
+          c.arc(f.x, f.y, 4, 0, Math.PI * 2);
+          c.fill();
+          c.fillStyle = `rgba(254, 240, 138, ${alphaPulse})`;
+          c.fillRect(Math.floor(f.x - 1), Math.floor(f.y - 1), 2, 2);
+        });
+        c.restore();
+      }
+
+      // ==========================================
+      // 8. FLOATING RETRO BANNER & SUBTITLE
+      // ==========================================
+      const floatY = 65 + Math.sin(now * 0.003) * 3;
+      c.save();
+      c.font = '8px "Press Start 2P"';
+      c.textAlign = 'center';
+
+      let titleColor, titleShadow, subColor, subtitleText;
+      if (period === 'dawn') {
+        titleColor = '#f59e0b';
+        titleShadow = '#451a03';
+        subColor = '#d97706';
+        subtitleText = 'DAWN ZEN GARDEN :: A FRESH MORNING';
+      } else if (period === 'day') {
+        titleColor = '#0284c7';
+        titleShadow = '#082f49';
+        subColor = '#0369a1';
+        subtitleText = 'MIDDAY ZEN GARDEN :: PURE HARMONY';
+      } else if (period === 'sunset') {
+        titleColor = '#fbbf24';
+        titleShadow = '#4c0519';
+        subColor = '#f97316';
+        subtitleText = 'TWILIGHT ZEN GARDEN :: PEACE AT DUSK';
+      } else {
+        titleColor = '#e2e8f0';
+        titleShadow = '#020617';
+        subColor = '#94a3b8';
+        subtitleText = 'MIDNIGHT ZEN GARDEN :: SERENE DREAMS';
+      }
+
+      // Drop shadow
+      c.fillStyle = titleShadow;
+      c.fillText('ALL CLEAR. REST EASY.', 201, floatY + 1);
+
+      // Main banner
+      c.fillStyle = titleColor;
+      c.fillText('ALL CLEAR. REST EASY.', 200, floatY);
+
+      // Subtitle
+      c.font = '6px "Press Start 2P"';
+      c.fillStyle = subColor;
+      c.fillText(subtitleText, 200, floatY + 16);
+      c.restore();
+    }
+
+    /**
+     * Main Animation Loop
+     */
+    function animationLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const now = Date.now();
+      const centerX = 200;
+
+      // Apply screen shake micro-juice
+      ctx.save();
+      if (screenShakeFrames > 0) {
+        const sx = (Math.random() - 0.5) * screenShakeMagnitude;
+        const sy = (Math.random() - 0.5) * screenShakeMagnitude;
+        ctx.translate(sx, sy);
+        screenShakeFrames--;
+      }
+
+      // Target state calculation
+      const targetTier = diceStack.length;
+      const targetRot = calculateAverageRot();
+
+      // Smooth tier transition (de-escalates gracefully at 0.05, escalates at 0.08)
+      const tierDiff = targetTier - visualTier;
+      visualTier += tierDiff * ((tierDiff < 0) ? 0.05 : 0.08);
+      if (Math.abs(tierDiff) < 0.005) visualTier = targetTier;
+
+      // Smooth rot hue transition (cleansing relief when completing corrupt tasks)
+      const rotDiff = targetRot - visualRot;
+      visualRot += rotDiff * 0.05;
+      if (Math.abs(rotDiff) < 0.002) visualRot = targetRot;
+
+      // Check if stack is completely cleared or fresh startup
+      if (diceStack.length === 0 && explosionParticles.length === 0) {
+        if (!hasClearedAll) {
+          // Tier 0 Empty Void startup background (#121417)
+          ctx.fillStyle = '#121417';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.font = '8px "Press Start 2P"';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#f7d51d';
+          ctx.fillText('TYPE TASK & ROLL TO BEGIN', 200, 160);
+        } else {
+          // Cross-fade bloom into Zen Garden as visualTier completes de-escalation
+          const zenAlpha = Math.min(1.0, Math.max(0.0, 1.0 - visualTier));
+          if (visualTier > 0.01) {
+            const rotColor = getAbyssalRotColor(visualRot, now);
+            ctx.fillStyle = rotColor.cssHsl;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          ctx.save();
+          ctx.globalAlpha = zenAlpha;
+          renderZenGarden(ctx);
+          ctx.restore();
+        }
+        updateAndDrawFloatingTexts(ctx);
+        ctx.restore();
+        requestAnimationFrame(animationLoop);
+        return;
+      }
+
+      // Dynamic background hue shift & palette tied to visualRot
+      const rotColor = getAbyssalRotColor(visualRot, now);
+      const bgHue = rotColor.hue; // Maintained for probe regex compatibility
+      const totalRot = visualRot; // Maintained for probe regex compatibility
+
+      ctx.fillStyle = rotColor.cssHsl;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 1. Draw procedural background corruption roots
+      drawCorruptionRoots(ctx, visualRot);
+
+      // Render Escalating Lovecraftian Abyss Background (Tiers 1 to 10)
+      renderLovecraftianAbyss(ctx, now, visualRot);
+
+      // 2. Ground shadow
+      if (diceStack.length > 0) {
+        const baseDie = diceStack[0];
+        const baseCfg = DICE_CONFIG[baseDie.weight_score] || DICE_CONFIG[5];
+        ctx.fillStyle = (totalRot >= 0.75) ? '#022c22' : '#0c0e11';
+        ctx.beginPath();
+        ctx.ellipse(centerX, GROUND_Y + 2, baseCfg.width * 0.7, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 3. Render dice stack with procedural wobble if overloaded
+      const isOverloaded = (diceStack.length >= 10);
+      const wobbleX = isOverloaded ? Math.sin(now * 0.008) * 2.2 : 0;
+      const wobbleTilt = isOverloaded ? Math.sin(now * 0.006) * 0.015 : 0;
+
+      ctx.save();
+      if (isOverloaded) {
+        ctx.translate(centerX + wobbleX, 0);
+        ctx.rotate(wobbleTilt);
+        ctx.translate(-centerX, 0);
+      }
+
+      for (let i = 0; i < diceStack.length; i++) {
+        const d = diceStack[i];
+        const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
+        const rot = getEffectiveRotFactor(d);
+
+        // Falling / Gravity Collapse physics
+        if (d.currentY < d.targetY) {
+          d.velocityY += 1.8;
+          d.currentY += d.velocityY;
+          if (d.currentY >= d.targetY) {
+            d.currentY = d.targetY;
+            d.velocityY = 0;
+            d.bounceFrame = 4;
+            // Heavy landing shake (weight >= 4)
+            if (d.weight_score >= 4) {
+              triggerScreenShake(3, 3);
+            }
+          }
+        } else if (d.currentY > d.targetY) {
+          d.currentY += (d.targetY - d.currentY) * 0.25;
+          if (Math.abs(d.currentY - d.targetY) < 0.5) {
+            d.currentY = d.targetY;
+          }
+        }
+
+        let renderY = d.currentY;
+        if (d.bounceFrame > 0) {
+          renderY += (d.bounceFrame > 2 ? -3 : -1);
+          d.bounceFrame--;
+        }
+
+        // Apply Twitch vibration micro-jitter for Stage 5 (rot >= 0.8)
+        const jitter = calculateTwitchJitter(rot, i, now);
+        const dieRenderX = centerX + jitter.dx;
+        const dieRenderY = renderY + jitter.dy;
+
+        // Spawn continuous viscous slime drips for Stage 5
+        if (rot >= 0.8) {
+          spawnStage5SlimeDrip(dieRenderX, dieRenderY, cfg.width / 2, cfg.ry, cfg.height, rot);
+        }
+
+        // Contact shadow (subtly tracks x jitter)
+        if (i > 0) {
+          ctx.fillStyle = (rot >= 0.75) ? 'rgba(5, 46, 22, 0.35)' : 'rgba(0, 0, 0, 0.25)';
+          ctx.beginPath();
+          ctx.ellipse(centerX + jitter.dx * 0.25, renderY + cfg.height + 2, cfg.width * 0.5, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Render die with jittered coordinates
+        drawRotIsometricDice(ctx, dieRenderX, dieRenderY, cfg.width, cfg.height, d.weight_score, d.title, rot);
+
+        // If overdue, draw pulsating overdue banner above die
+        if (rot >= 1.0) {
+          drawOverdueDieBanner(ctx, dieRenderX, dieRenderY, cfg.width, cfg.ry);
+        }
+
+        // 2px Glowing pixel border for hovered resting die (synchronized with jitter)
+        if (d === hoveredDie) {
+          ctx.save();
+          const glowAlpha = 0.65 + 0.35 * Math.sin(now * 0.008);
+          const isOverdue = (rot >= 1.0);
+          ctx.shadowColor = isOverdue ? '#e76e55' : '#ffd700';
+          ctx.shadowBlur = 6;
+          ctx.strokeStyle = isOverdue ? `rgba(231, 110, 85, ${glowAlpha})` : `rgba(255, 215, 0, ${glowAlpha})`; // 2px glowing pixel border
+          ctx.lineWidth = 2;
+          ctx.strokeRect(dieRenderX - cfg.width / 2 - 2, dieRenderY - cfg.ry - 2, cfg.width + 4, cfg.height + cfg.ry * 2 + 4);
+          ctx.restore();
+        }
+      }
+
+      ctx.restore(); // restore wobble transform
+
+      // 4. Update and draw dripping slime particles
+      updateAndDrawSlime(ctx);
+
+      // 5. Update and draw explosion particles
+      updateAndDrawExplosions(ctx);
+
+      // 6. Draw floating streak multiplier texts
+      updateAndDrawFloatingTexts(ctx);
+
+      // Floating retro tooltip for hovered resting die
+      if (hoveredDie) {
+        drawRetroTooltip(ctx, hoveredDie);
+      }
+
+      // 7. Draw Overload Banner if at 10-task limit
+      if (isOverloaded) {
+        drawOverloadBanner(ctx);
+      }
+
+      ctx.restore(); // restore screen shake
+
+      requestAnimationFrame(animationLoop);
+    }
+
+    requestAnimationFrame(animationLoop);
+
+    /**
+     * Initial tasks load
+     */
+    function initTasks() {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.get_tasks) {
+        window.pywebview.api.get_tasks().then((tasks) => {
+          hasLoadedTasksOnce = true;
+          if (Array.isArray(tasks) && tasks.length > 0) {
+            hasHadTasks = true;
+            tasks.forEach(t => addDieToStack(t, true));
+          }
+        }).catch(err => {
+          console.error('[TaskbarDice] get_tasks error:', err);
+        });
+      }
+    }
+
+    window.addEventListener('pywebviewready', () => {
+      initTasks();
+    });
+
+    setTimeout(() => {
+      if (diceStack.length === 0 && !hasLoadedTasksOnce) {
+        initTasks();
+      }
+    }, 300);
+
+    // Control Panel State & 2-Row Event Handling
+    let selectedWeight = 1;
+    let selectedDurationMinutes = 25;
+
+    const weightButtons = document.querySelectorAll('.weight-btn');
+    weightButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        weightButtons.forEach(b => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        selectedWeight = parseInt(btn.dataset.w, 10);
+      });
+    });
+
+    const timeButtons = document.querySelectorAll('.time-btn');
+    const customTimeBtn = document.getElementById('customTimeBtn');
+
+    function parseTimePreset(tStr) {
+      if (tStr === '15m') return 15;
+      if (tStr === '25m') return 25;
+      if (tStr === '1h') return 60;
+      if (tStr === '4h') return 240;
+      return null;
+    }
+
+    timeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tVal = btn.dataset.t;
+        if (tVal === 'custom') {
+          const customPrompt = prompt('Enter custom duration in minutes (1 - 1440):', '30');
+          if (customPrompt !== null) {
+            const mins = parseInt(customPrompt, 10);
+            if (!isNaN(mins) && mins > 0 && mins <= 1440) {
+              timeButtons.forEach(b => b.classList.remove('is-active'));
+              btn.classList.add('is-active');
+              btn.textContent = `${mins}m`;
+              selectedDurationMinutes = mins;
+            }
+          }
+        } else {
+          timeButtons.forEach(b => b.classList.remove('is-active'));
+          btn.classList.add('is-active');
+          selectedDurationMinutes = parseTimePreset(tVal) || 25;
+        }
+      });
+    });
+
+    // Programmatic test hooks for probes / E2E verification
+    window.setSelectedWeight = (w) => {
+      selectedWeight = parseInt(w, 10);
+      weightButtons.forEach(b => {
+        b.classList.toggle('is-active', parseInt(b.dataset.w, 10) === selectedWeight);
+      });
+    };
+    window.setSelectedDuration = (m) => {
+      selectedDurationMinutes = parseInt(m, 10);
+      timeButtons.forEach(b => {
+        const val = parseTimePreset(b.dataset.t);
+        b.classList.toggle('is-active', val === selectedDurationMinutes);
+      });
+    };
+    window.getSelectedWeight = () => selectedWeight;
+    window.getSelectedDuration = () => selectedDurationMinutes;
+
+    // Form submission
+    const taskForm = document.getElementById('taskForm');
+    const taskInput = document.getElementById('taskInput');
+
+    taskForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = taskInput.value.trim();
+      if (!text) return;
+
+      hasHadTasks = true;
+      hasClearedAll = false;
+
+      // 10-Task Overload Rejection & NES warning shake
+      if (diceStack.length >= 10) {
+        const panel = document.querySelector('.control-panel') || document.querySelector('.bottom-bar');
+        if (panel) {
+          panel.classList.remove('shake-anim');
+          void panel.offsetWidth; // trigger reflow
+          panel.classList.add('shake-anim');
+        }
+        showToast('OVERLOAD! CLEAR A TASK');
+        triggerScreenShake(4, 2);
+        return;
+      }
+
+      taskInput.value = '';
+      taskInput.focus();
+
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.add_task) {
+        window.pywebview.api.add_task(text, selectedWeight, selectedDurationMinutes).then((res) => {
+          if (res && res.status === 'ok' && res.task) {
+            addDieToStack(res.task, false);
+            showToast(`+${res.task.title.substring(0, 8)} (W:${res.task.weight_score})`);
+          } else if (res && res.error === 'overload') {
+            const panel = document.querySelector('.control-panel') || document.querySelector('.bottom-bar');
+            if (panel) {
+              panel.classList.remove('shake-anim');
+              void panel.offsetWidth;
+              panel.classList.add('shake-anim');
+            }
+            showToast('TOWER OVERLOAD (10/10)!');
+          }
+        }).catch((err) => {
+          console.error('[TaskbarDice] add_task error:', err);
+          showToast('ERROR ADDING');
+        });
+      } else {
+        const fallbackTask = {
+          id: Math.random().toString(36).substring(2, 6),
+          title: text,
+          weight_score: selectedWeight,
+          deadline_str: `${selectedDurationMinutes}m`,
+          created_at: new Date().toISOString(),
+          deadline_at: new Date(Date.now() + selectedDurationMinutes * 60000).toISOString()
+        };
+        addDieToStack(fallbackTask, false);
+        showToast('LOCAL ADDED');
+      }
+    });
+
+    // Mousemove hover inspection hit detection on resting dice with canvas scaling
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width > 0 ? (canvas.width / rect.width) : 1;
+      const scaleY = rect.height > 0 ? (canvas.height / rect.height) : 1;
+      mousePos.x = (e.clientX - rect.left) * scaleX;
+      mousePos.y = (e.clientY - rect.top) * scaleY;
+      hoveredDie = null;
+
+      const centerX = 200;
+      for (let i = diceStack.length - 1; i >= 0; i--) {
+        const d = diceStack[i];
+        // Resting die check (|currentY - targetY| <= 2.0)
+        if (Math.abs(d.currentY - d.targetY) <= 2.0 && Math.abs(d.velocityY) <= 0.5) {
+          const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
+          const rx = cfg.width / 2;
+          const topY = d.currentY - cfg.ry;
+          const botY = d.currentY + cfg.ry + cfg.height;
+          if (mousePos.x >= centerX - rx && mousePos.x <= centerX + rx && mousePos.y >= topY && mousePos.y <= botY) {
+            hoveredDie = d;
+            break;
+          }
+        }
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      hoveredDie = null;
+      mousePos = { x: -1, y: -1 };
+    });
+
+    /**
+     * Draws floating retro inspection tooltip with full title word wrapping,
+     * weight, rot stage [X/5], countdown timer (CÒN / blinking red QUÁ HẠN),
+     * and smart 4-way clamping inside 400x320 canvas.
+     */
+    function drawRetroTooltip(c, die) {
+      if (!die) return;
+      const rot = getEffectiveRotFactor(die);
+      const stage = Math.max(1, Math.min(5, Math.floor(rot * 5) + 1));
+      const isOverdue = (rot >= 1.0);
+
+      const createdTime = new Date(die.created_at).getTime();
+      const deadlineTime = new Date(die.deadline_at).getTime();
+      const now = Date.now();
+      const diffSec = Math.floor(Math.abs(deadlineTime - now) / 1000);
+      const m = Math.floor(diffSec / 60);
+      const s = diffSec % 60;
+      const timeStr = isOverdue ? `QUÁ HẠN: +${m}m ${s}s` : `CÒN: ${m}m ${s}s`;
+
+      c.save();
+      c.font = '6px "Press Start 2P"';
+      const measure = (str) => (c.measureText ? c.measureText(str).width : str.length * 6);
+
+      // 1. Full Title multi-line wrapping (up to 2 lines)
+      const fullTitle = (die.title || 'UNTITLED').trim();
+      const maxLineWidth = 180;
+      const words = fullTitle.split(/\s+/);
+      let lines = [];
+      let currentLine = '';
+      let hasMore = false;
+
+      for (let w = 0; w < words.length; w++) {
+        const word = words[w];
+        if (!word) continue;
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (measure(testLine) <= maxLineWidth) {
+          currentLine = testLine;
+        } else {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = '';
+            if (lines.length >= 2) { hasMore = true; break; }
+          }
+          if (measure(word) <= maxLineWidth) {
+            currentLine = word;
+          } else {
+            // Word is wider than maxLineWidth: chunk by code points safely (protects surrogate pairs & diacritics)
+            const normWord = word.normalize ? word.normalize('NFC') : word;
+            let chunk = '';
+            for (const ch of Array.from(normWord)) {
+              if (measure(chunk + ch) <= maxLineWidth) {
+                chunk += ch;
+              } else {
+                if (chunk) {
+                  lines.push(chunk);
+                  if (lines.length >= 2) {
+                    chunk = '';
+                    hasMore = true;
+                    break;
+                  }
+                }
+                chunk = ch;
+              }
+            }
+            currentLine = chunk;
+            if (lines.length >= 2) { hasMore = true; break; }
+          }
+        }
+      }
+      if (currentLine && lines.length < 2) lines.push(currentLine);
+      if (lines.length === 0) lines.push(Array.from(fullTitle).slice(0, 22).join(''));
+      if (lines.length > 2) lines = lines.slice(0, 2);
+      if (hasMore && lines.length === 2) {
+        let l2Chars = Array.from(lines[1]);
+        while (l2Chars.length > 0 && measure(l2Chars.join('') + '...') > maxLineWidth) {
+          l2Chars.pop();
+        }
+        lines[1] = l2Chars.join('') + '...';
+      }
+      for (let i = 0; i < lines.length; i++) {
+        while (lines[i].length > 0 && measure(lines[i]) > maxLineWidth) {
+          let chars = Array.from(lines[i]);
+          chars.pop();
+          lines[i] = chars.join('');
+        }
+      }
+
+      // Dynamic box dimensions
+      let maxTitleWidth = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const lw = measure(lines[i]);
+        if (lw > maxTitleWidth) maxTitleWidth = lw;
+      }
+      const timeWidth = measure(timeStr);
+      const metaStr = `W:${die.weight_score} | STAGE: [${stage}/5]`;
+      const metaWidth = measure(metaStr);
+      const contentWidth = Math.max(maxTitleWidth, Math.max(timeWidth, metaWidth));
+
+      const tooltipWidth = Math.max(160, Math.min(230, Math.floor(contentWidth + 16)));
+      const tooltipHeight = (lines.length > 1) ? 58 : 46;
+      const padding = 8;
+
+      // 2. Smart Clamping: 4-way 400x320 Canvas Boundary Guard
+      let tooltipX = mousePos.x + 12;
+      if (tooltipX + tooltipWidth > 400 - padding) {
+        tooltipX = mousePos.x - tooltipWidth - 12;
+      }
+      tooltipX = Math.max(padding, Math.min(400 - tooltipWidth - padding, tooltipX));
+
+      let tooltipY = mousePos.y - tooltipHeight - 8;
+      if (tooltipY < padding) {
+        tooltipY = mousePos.y + 22;
+      }
+      tooltipY = Math.max(padding, Math.min(320 - tooltipHeight - padding, tooltipY));
+
+      // 3. Render Tooltip Frame
+      c.fillStyle = 'rgba(18, 20, 23, 0.96)';
+      c.fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+
+      // 2px Glowing pixel border (gold or red if overdue)
+      c.strokeStyle = isOverdue ? '#e76e55' : 'rgba(255, 215, 0, 0.9)'; // 2px glowing pixel border
+      c.lineWidth = 2;
+      c.strokeRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+
+      // 4. Content Typography
+      let hasClip = false;
+      if (typeof c.clip === 'function') {
+        c.save();
+        c.beginPath();
+        c.rect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+        if (typeof c.clip === 'function') c.clip();
+        hasClip = true;
+      }
+
+      let textY = tooltipY + 12;
+      c.textAlign = 'left';
+      c.textBaseline = 'alphabetic';
+
+      // Title lines
+      c.fillStyle = '#ffffff';
+      for (let l = 0; l < lines.length; l++) {
+        c.fillText(lines[l], tooltipX + 6, textY);
+        textY += 10;
+      }
+
+      // Weight & Stage line
+      const stageColors = ['#fdfbf7', '#fdfbf7', '#eae0c8', '#8a8d8f', '#4a5d4e', '#a3e635'];
+      c.fillStyle = '#92cc41';
+      const wLabel = `W:${die.weight_score} | `;
+      c.fillText(wLabel, tooltipX + 6, textY);
+      const wWidth = measure(wLabel);
+      c.fillStyle = stageColors[stage] || '#ffd700';
+      c.fillText(`STAGE: [${stage}/5]`, tooltipX + 6 + wWidth, textY);
+      textY += 11;
+
+      // Countdown timer line (Blinking red if overdue, NES Yellow if active)
+      const blink = Math.floor(now / 220) % 2 === 0;
+      if (isOverdue) {
+        c.fillStyle = blink ? '#ff2222' : '#881111'; // Blinking red when overdue
+      } else {
+        c.fillStyle = '#f7d51d';
+      }
+      c.fillText(timeStr, tooltipX + 6, textY);
+
+      if (hasClip) {
+        c.restore();
+      }
+
+      c.restore();
+    }
+
+    // Double-Click Hit Detection on Dice Stack
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalTaskName = document.getElementById('modalTaskName');
+    const confirmCompleteBtn = document.getElementById('confirmCompleteBtn');
+    const cancelCompleteBtn = document.getElementById('cancelCompleteBtn');
+
+    canvas.addEventListener('dblclick', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width > 0 ? (canvas.width / rect.width) : 1;
+      const scaleY = rect.height > 0 ? (canvas.height / rect.height) : 1;
+      const mx = (e.clientX - rect.left) * scaleX;
+      const my = (e.clientY - rect.top) * scaleY;
+      const centerX = 200;
+
+      // Scan from top die (highest index) down to bottom die (index 0)
+      for (let i = diceStack.length - 1; i >= 0; i--) {
+        const d = diceStack[i];
+
+        // State lock: Only bind to resting blocks! Ignore falling / collapsing blocks
+        if (Math.abs(d.currentY - d.targetY) > 2.0 || Math.abs(d.velocityY) > 0.5) {
+          continue;
+        }
+
+        const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
+        const rx = cfg.width / 2;
+        const ry = cfg.width / 4;
+
+        // Bounding box: x in [centerX - rx, centerX + rx], y in [currentY - ry, currentY + ry + height]
+        const topY = d.currentY - ry;
+        const botY = d.currentY + ry + cfg.height;
+        const leftX = centerX - rx;
+        const rightX = centerX + rx;
+
+        if (mx >= leftX && mx <= rightX && my >= topY && my <= botY) {
+          selectedTask = d;
+          modalTaskName.textContent = `TASK: "${d.title}"`;
+          modalOverlay.style.display = 'flex';
+          return;
+        }
+      }
+    });
+
+    // Anti-Slacking Modal: Confirm Completion
+    confirmCompleteBtn.addEventListener('click', () => {
+      if (!selectedTask) {
+        modalOverlay.style.display = 'none';
+        return;
+      }
+
+      const taskId = selectedTask.id;
+      const taskIndex = diceStack.findIndex(d => d.id === taskId);
+
+      // Overdue streak reset (0) vs on-time streak increment (++)
+      const rotVal = getEffectiveRotFactor(selectedTask);
+      const isOverdue = (rotVal >= 1.0);
+      if (isOverdue) {
+        sessionStreak = 0;
+        spawnFloatingText(200, 100, `STREAK LOST! OVERDUE`, '#e76e55');
+      } else {
+        sessionStreak++;
+        if (sessionStreak >= 2) {
+          spawnFloatingText(200, 100, `+1 STREAK! COMBO x${sessionStreak}`, '#f7d51d');
+        }
+      }
+
+      // Screen juice shake & particle explosion
+      triggerScreenShake(6, 4);
+      triggerDiceExplosion(selectedTask);
+
+      // Remove from active stack
+      if (taskIndex !== -1) {
+        diceStack.splice(taskIndex, 1);
+      }
+      if (diceStack.length === 0 && hasHadTasks) {
+        hasClearedAll = true;
+        spawnFloatingText(200, 140, 'ALL TASKS CLEARED!', '#ffd700');
+      }
+
+      // Recalculate targets for upper dice to collapse downward (and unlock input if was at 10)
+      recalculateTargets();
+
+      // Call Python backend persistence
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.complete_task) {
+        window.pywebview.api.complete_task(taskId).then((res) => {
+          if (res && res.was_overdue) {
+            sessionStreak = 0;
+          }
+          showToast('TASK COMPLETED!');
+        }).catch(err => {
+          console.error('[TaskbarDice] complete_task error:', err);
+        });
+      } else {
+        showToast('TASK COMPLETED!');
+      }
+
+      modalOverlay.style.display = 'none';
+      selectedTask = null;
+    });
+
+    // Anti-Slacking Modal: Cancel
+    cancelCompleteBtn.addEventListener('click', () => {
+      modalOverlay.style.display = 'none';
+      selectedTask = null;
+    });
+
+    // Developer Speed-Test Mode listener (Key 'D')
+    window.addEventListener('keydown', (e) => {
+      if (e.target === taskInput) return;
+
+      if (e.key === 'd' || e.key === 'D') {
+        devMode = (devMode + 1) % 7;
+        let modeLabel = '';
+        if (devMode === 0) modeLabel = '[D] REALTIME';
+        else if (devMode === 1) modeLabel = '[D] STAGE 1 (IVORY)';
+        else if (devMode === 2) modeLabel = '[D] STAGE 2 (SANDY)';
+        else if (devMode === 3) modeLabel = '[D] STAGE 3 (CRACKED)';
+        else if (devMode === 4) modeLabel = '[D] STAGE 4 (MOSSY)';
+        else if (devMode === 5) modeLabel = '[D] STAGE 5 (NECROTIC)';
+        else if (devMode === 6) modeLabel = '[D] STAGE 5 (OVERDUE)';
+
+        rotStatusBadge.textContent = modeLabel;
+        showToast(modeLabel);
+      }
+    });
+
+    // Close button
+    const closeBtn = document.getElementById('closeBtn');
+    closeBtn.addEventListener('click', () => {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.close_app) {
+        window.pywebview.api.close_app();
+      } else {
+        window.close();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+/* Deadline Heavyweight - Custom Industrial Dark Theme */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-deep: #07090e;
+  --bg-panel: #0d121d;
+  --bg-card: #131b2e;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-accent: rgba(99, 102, 241, 0.3);
+  --stress-calm: #38bdf8;
+  --stress-elevated: #fb923c;
+  --stress-critical: #ef4444;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-deep);
+  color: #e2e8f0;
+  overflow: hidden;
+  user-select: none;
+}
+
+code, .font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Glow effects */
+.glow-critical {
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.glow-elevated {
+  box-shadow: 0 0 20px rgba(251, 146, 60, 0.25);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
+.glow-calm {
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(13, 18, 29, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Pulsing warning animation */
+@keyframes stress-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.animate-stress-pulse {
+  animation: stress-pulse 1.8s infinite ease-in-out;
+}
