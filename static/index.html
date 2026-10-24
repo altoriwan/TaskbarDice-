@@ -964,6 +964,46 @@
     }
 
     /**
+     * Calculates organic natural stack horizontal stagger offset for physical hand-stacked look.
+     * Base die (i === 0) remains anchored at 0. Upper dice (i > 0) stagger naturally within [-1.8px, +1.8px].
+     */
+    function getDieStackOffsetX(d, i) {
+      if (i === 0) return 0;
+      let hash = 0;
+      const str = (d && d.id) ? String(d.id) : ('die_' + i);
+      for (let k = 0; k < str.length; k++) {
+        hash = (hash * 31 + str.charCodeAt(k)) & 0xffff;
+      }
+      // Alternate left/right based on level with pseudo-random organic magnitude
+      const sign = (i % 2 === 1) ? -1 : 1;
+      const magnitude = 0.8 + ((hash % 100) / 100) * 1.0; // 0.8px .. 1.8px
+      return Math.round(sign * magnitude * 10) / 10;
+    }
+
+    /**
+     * Calculates organic physical micro-tilt angle for dice tower.
+     * Base die (i === 0) rests flat on floor. Upper dice (i > 0) have subtle micro-tilts within [-1.2 deg, +1.2 deg]
+     * plus dynamic landing wobble damping.
+     */
+    function getDieTiltAngle(d, i) {
+      if (i === 0) return 0;
+      let hash = 0;
+      const str = (d && d.id) ? String(d.id) : ('die_' + i);
+      for (let k = 0; k < str.length; k++) {
+        hash = (hash * 37 + str.charCodeAt(k)) & 0xffff;
+      }
+      // Micro tilt ~0.010 to 0.018 radians (0.57 deg to 1.03 deg)
+      const sign = (i % 2 === 1) ? -1 : 1;
+      const baseTilt = sign * (0.010 + ((hash % 80) / 10000));
+      // Dynamic landing settle wobble
+      let wobble = 0;
+      if (d && d.bounceFrame > 0) {
+        wobble = Math.sin(d.bounceFrame * 1.5) * 0.025;
+      }
+      return baseTilt + wobble;
+    }
+
+    /**
      * Adds die to stack
      */
     function addDieToStack(task, isInitial = false) {
@@ -2625,9 +2665,21 @@
         const dieRenderX = centerX + jitter.dx;
         const dieRenderY = renderY + jitter.dy;
 
+        // Natural organic stack stagger and micro-tilt
+        const stackOffsetX = getDieStackOffsetX(d, i);
+        const tiltAngle = getDieTiltAngle(d, i);
+
         // Spawn continuous viscous slime drips for Stage 5
         if (rot >= 0.8) {
-          spawnStage5SlimeDrip(dieRenderX, dieRenderY, cfg.width / 2, cfg.ry, cfg.height, rot);
+          spawnStage5SlimeDrip(dieRenderX + stackOffsetX, dieRenderY, cfg.width / 2, cfg.ry, cfg.height, rot);
+        }
+
+        ctx.save();
+        if (stackOffsetX !== 0 || tiltAngle !== 0) {
+          ctx.translate(stackOffsetX, 0);
+          ctx.translate(dieRenderX, dieRenderY + cfg.height / 2);
+          ctx.rotate(tiltAngle);
+          ctx.translate(-dieRenderX, -(dieRenderY + cfg.height / 2));
         }
 
         // Contact shadow (subtly tracks x jitter)
@@ -2658,6 +2710,8 @@
           ctx.strokeRect(dieRenderX - cfg.width / 2 - 2, dieRenderY - cfg.ry - 2, cfg.width + 4, cfg.height + cfg.ry * 2 + 4);
           ctx.restore();
         }
+
+        ctx.restore(); // restore individual die transform
       }
 
       ctx.restore(); // restore wobble transform
@@ -3614,6 +3668,8 @@
     // Programmatic test hook
     window.setAppScale = setAppScale;
     window.getAppScale = getAppScale;
+    window.getDieStackOffsetX = getDieStackOffsetX;
+    window.getDieTiltAngle = getDieTiltAngle;
   </script>
 </body>
 </html>
