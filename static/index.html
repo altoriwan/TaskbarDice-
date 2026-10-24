@@ -2688,21 +2688,44 @@
 
     requestAnimationFrame(animationLoop);
 
+    let initTasksPromise = null;
+
     /**
-     * Initial tasks load
+     * Initial tasks load with idempotent single-promise sentinel and state reconciliation
      */
     function initTasks() {
+      if (initTasksPromise) {
+        return initTasksPromise;
+      }
       if (window.pywebview && window.pywebview.api && window.pywebview.api.get_tasks) {
-        window.pywebview.api.get_tasks().then((tasks) => {
+        initTasksPromise = window.pywebview.api.get_tasks().then((tasks) => {
           hasLoadedTasksOnce = true;
           if (Array.isArray(tasks) && tasks.length > 0) {
             hasHadTasks = true;
-            tasks.forEach(t => addDieToStack(t, true));
+            const existingIds = new Set(diceStack.map(d => d.id));
+            tasks.forEach(t => {
+              if (t && t.id && !existingIds.has(t.id)) {
+                addDieToStack(t, true);
+                existingIds.add(t.id);
+              }
+            });
           }
+          // Sync streak from backend if available
+          if (window.pywebview.api.get_streak) {
+            window.pywebview.api.get_streak().then((sRes) => {
+              if (sRes && typeof sRes.streak === 'number') {
+                sessionStreak = sRes.streak;
+              }
+            }).catch(() => {});
+          }
+          return tasks;
         }).catch(err => {
           console.error('[TaskbarDice] get_tasks error:', err);
+          initTasksPromise = null; // allow retry
         });
+        return initTasksPromise;
       }
+      return Promise.resolve([]);
     }
 
     window.addEventListener('pywebviewready', () => {
@@ -2992,7 +3015,7 @@
 
       // Duplicate Task Validation (Case-insensitive check against active diceStack)
       const normInput = text.toLowerCase();
-      const isDuplicate = diceStack.some(d => (d.title || '').trim().toLowerCase() === normInput);
+      const isDuplicate = diceStack.some(d => ((d.stored_title || d.title) || '').trim().toLowerCase() === normInput);
       if (isDuplicate) {
         const panel = document.querySelector('.control-panel') || document.querySelector('.bottom-bar');
         if (panel) {
@@ -3021,12 +3044,14 @@
         return;
       }
 
-      taskInput.value = '';
-      taskInput.focus();
+      const addBtn = document.getElementById('addBtn');
 
       if (window.pywebview && window.pywebview.api && window.pywebview.api.add_task) {
+        if (addBtn) addBtn.disabled = true;
         window.pywebview.api.add_task(text, selectedWeight, selectedDurationMinutes).then((res) => {
           if (res && res.status === 'ok' && res.task) {
+            taskInput.value = '';
+            taskInput.focus();
             addDieToStack(res.task, false);
             showToast(`+${res.task.title.substring(0, 8)} (W:${res.task.weight_score})`);
           } else if (res && res.error === 'duplicate') {
@@ -3046,15 +3071,22 @@
               panel.classList.add('shake-anim');
             }
             showToast('TOWER OVERLOAD (10/10)!');
+          } else {
+            showToast('FAILED TO ADD TASK');
           }
         }).catch((err) => {
           console.error('[TaskbarDice] add_task error:', err);
           showToast('ERROR ADDING');
+        }).finally(() => {
+          if (addBtn) addBtn.disabled = false;
         });
       } else {
+        taskInput.value = '';
+        taskInput.focus();
         const fallbackTask = {
           id: Math.random().toString(36).substring(2, 6),
-          title: text,
+          title: text.length > 40 ? text.substring(0, 37) + '...' : text,
+          stored_title: text,
           weight_score: selectedWeight,
           deadline_str: formatDurationMinutesClient(selectedDurationMinutes),
           created_at: new Date().toISOString(),
@@ -3331,7 +3363,7 @@
 
         if (mx >= leftX && mx <= rightX && my >= topY && my <= botY) {
           selectedTask = d;
-          modalTaskName.textContent = `TASK: "${d.title}"`;
+          modalTaskName.textContent = `TASK: "${d.stored_title || d.title}"`;
           modalOverlay.style.display = 'flex';
           return;
         }
@@ -3339,60 +3371,103 @@
     });
 
     // Anti-Slacking Modal: Confirm Completion
+    const inFlightCompletions = new Set();
+
     confirmCompleteBtn.addEventListener('click', () => {
       if (!selectedTask) {
         modalOverlay.style.display = 'none';
         return;
       }
 
-      const taskId = selectedTask.id;
-      const taskIndex = diceStack.findIndex(d => d.id === taskId);
+      const taskToComplete = selectedTask;
+      const taskId = taskToComplete.id;
 
-      // Overdue streak reset (0) vs on-time streak increment (++)
-      const rotVal = getEffectiveRotFactor(selectedTask);
-      const isOverdue = (rotVal >= 1.0);
-      if (isOverdue) {
-        sessionStreak = 0;
-        spawnFloatingText(200, 100, `STREAK LOST! OVERDUE`, '#e76e55');
-      } else {
-        sessionStreak++;
-        if (sessionStreak >= 2) {
-          spawnFloatingText(200, 100, `+1 STREAK! COMBO x${sessionStreak}`, '#f7d51d');
-        }
+      if (inFlightCompletions.has(taskId) || confirmCompleteBtn.disabled) {
+        return;
       }
 
-      // Screen juice shake & particle explosion
-      triggerScreenShake(6, 4);
-      triggerDiceExplosion(selectedTask);
+      inFlightCompletions.add(taskId);
+      confirmCompleteBtn.disabled = true;
+      modalOverlay.style.display = 'none';
 
-      // Remove from active stack
-      if (taskIndex !== -1) {
-        diceStack.splice(taskIndex, 1);
-      }
-      if (diceStack.length === 0 && hasHadTasks) {
-        hasClearedAll = true;
-        spawnFloatingText(200, 140, 'ALL TASKS CLEARED!', '#ffd700');
-      }
-
-      // Recalculate targets for upper dice to collapse downward (and unlock input if was at 10)
-      recalculateTargets();
-
-      // Call Python backend persistence
       if (window.pywebview && window.pywebview.api && window.pywebview.api.complete_task) {
         window.pywebview.api.complete_task(taskId).then((res) => {
-          if (res && res.was_overdue) {
-            sessionStreak = 0;
+          if (res && res.status === 'ok') {
+            if (typeof res.streak === 'number') {
+              sessionStreak = res.streak;
+            } else if (res.was_overdue) {
+              sessionStreak = 0;
+            } else {
+              sessionStreak++;
+            }
+
+            if (res.was_overdue) {
+              spawnFloatingText(200, 100, `STREAK LOST! OVERDUE`, '#e76e55');
+            } else if (sessionStreak >= 2) {
+              spawnFloatingText(200, 100, `+1 STREAK! COMBO x${sessionStreak}`, '#f7d51d');
+            }
+
+            // Screen juice shake & particle explosion
+            triggerScreenShake(6, 4);
+            triggerDiceExplosion(taskToComplete);
+
+            // Remove from active stack
+            const taskIndex = diceStack.findIndex(d => d.id === taskId);
+            if (taskIndex !== -1) {
+              diceStack.splice(taskIndex, 1);
+            }
+            if (diceStack.length === 0 && hasHadTasks) {
+              hasClearedAll = true;
+              spawnFloatingText(200, 140, 'ALL TASKS CLEARED!', '#ffd700');
+            }
+
+            // Recalculate targets for upper dice to collapse downward
+            recalculateTargets();
+            showToast('TASK COMPLETED!');
+          } else {
+            showToast('COMPLETION FAILED');
           }
-          showToast('TASK COMPLETED!');
-        }).catch(err => {
+        }).catch((err) => {
           console.error('[TaskbarDice] complete_task error:', err);
+          showToast('ERROR COMPLETING');
+        }).finally(() => {
+          inFlightCompletions.delete(taskId);
+          confirmCompleteBtn.disabled = false;
+          selectedTask = null;
         });
       } else {
-        showToast('TASK COMPLETED!');
-      }
+        // Fallback for non-pywebview environment (browser / test VM)
+        const rotVal = getEffectiveRotFactor(taskToComplete);
+        const isOverdue = (rotVal >= 1.0);
+        if (isOverdue) {
+          sessionStreak = 0;
+          spawnFloatingText(200, 100, `STREAK LOST! OVERDUE`, '#e76e55');
+        } else {
+          sessionStreak++;
+          if (sessionStreak >= 2) {
+            spawnFloatingText(200, 100, `+1 STREAK! COMBO x${sessionStreak}`, '#f7d51d');
+          }
+        }
 
-      modalOverlay.style.display = 'none';
-      selectedTask = null;
+        triggerScreenShake(6, 4);
+        triggerDiceExplosion(taskToComplete);
+
+        const taskIndex = diceStack.findIndex(d => d.id === taskId);
+        if (taskIndex !== -1) {
+          diceStack.splice(taskIndex, 1);
+        }
+        if (diceStack.length === 0 && hasHadTasks) {
+          hasClearedAll = true;
+          spawnFloatingText(200, 140, 'ALL TASKS CLEARED!', '#ffd700');
+        }
+
+        recalculateTargets();
+        showToast('TASK COMPLETED!');
+
+        inFlightCompletions.delete(taskId);
+        confirmCompleteBtn.disabled = false;
+        selectedTask = null;
+      }
     });
 
     // Anti-Slacking Modal: Cancel

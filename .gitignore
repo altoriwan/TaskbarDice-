@@ -20,6 +20,8 @@ push_to_github.bat
 GEMINI.md
 ORIGINAL_REQUEST.md
 TEST_READY.md
+TaskbarDice_AI_Implementation_Prompt.md
+TaskbarDice_EXE_QA_Report.md
 test_trace.bat
 tests/
 app/

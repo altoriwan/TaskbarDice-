@@ -219,14 +219,14 @@ def parse_task_input(
     deadline_at = deadline_dt.isoformat()
 
     # Clean title by trimming extra whitespaces
-    title = cleaned
-    # Optionally shorten title for 2.5D dice face display if needed
-    if len(title) > 40:
-        title = title[:37] + "..."
+    stored_title = cleaned
+    # Compact display title for 2.5D dice face display
+    display_title = cleaned[:37] + "..." if len(cleaned) > 40 else cleaned
 
     return {
         "id": str(uuid.uuid4())[:8],
-        "title": title,
+        "title": display_title,
+        "stored_title": stored_title,
         "deadline_str": deadline_str,
         "deadline_at": deadline_at,
         "weight_score": weight_score,
@@ -236,57 +236,139 @@ def parse_task_input(
 
 
 class TaskStorage:
-    """Handles thread-safe local JSON persistence for tasks with atomic replacement."""
+    """Handles thread-safe local JSON persistence for tasks and state with atomic replacement and transactional rollback."""
 
     MAX_ACTIVE_TASKS = 10
 
     def __init__(self, filepath: str = "tasks.json", max_active: Optional[int] = None):
         self.filepath = filepath
-        self._lock = threading.Lock()
+        self.state_filepath = f"{os.path.splitext(self.filepath)[0]}_state.json"
+        self._lock = threading.RLock()
         self.tasks: List[Dict[str, Any]] = []
+        self.streak: int = 0
+        self.window_position: Optional[Dict[str, int]] = None
+        self.storage_corrupted: bool = False
+        self.last_corrupt_backup: Optional[str] = None
         self.max_active = max_active
         self.load_tasks()
 
     def load_tasks(self) -> List[Dict[str, Any]]:
-        """Loads tasks from disk with fallback to empty list."""
+        """Loads tasks from disk with quarantine backup for corrupt files to prevent silent data loss."""
         with self._lock:
             if not os.path.exists(self.filepath):
                 self.tasks = []
+                self.streak = 0
                 return self.tasks
 
             try:
                 with open(self.filepath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        self.tasks = data
-                    else:
-                        self.tasks = []
+                    content = f.read()
+                if not content.strip():
+                    data = []
+                else:
+                    data = json.loads(content)
+
+                if isinstance(data, list):
+                    self.tasks = data
+                elif isinstance(data, dict):
+                    self.tasks = data.get("tasks", [])
+                    if "streak" in data:
+                        self.streak = int(data.get("streak", 0))
+                    if "window_position" in data:
+                        self.window_position = data.get("window_position")
+                else:
+                    raise ValueError(f"Unexpected JSON data type: {type(data)}")
             except Exception as e:
-                print(f"[TaskStorage] Error loading {self.filepath}: {e}")
+                print(f"[TaskStorage] CRITICAL: Corrupted storage file {self.filepath}: {e}")
+                if os.path.exists(self.filepath) and os.path.getsize(self.filepath) > 0:
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    corrupt_backup = f"{self.filepath}.corrupt.{timestamp}.bak"
+                    try:
+                        import shutil
+                        shutil.copy2(self.filepath, corrupt_backup)
+                        self.last_corrupt_backup = corrupt_backup
+                        print(f"[TaskStorage] Quarantined corrupt storage to {corrupt_backup}")
+                    except Exception as c_err:
+                        print(f"[TaskStorage] Backup copy failed: {c_err}")
+                self.storage_corrupted = True
                 self.tasks = []
+
+            # Load accompanying state (streak & window position)
+            if os.path.exists(self.state_filepath):
+                try:
+                    with open(self.state_filepath, "r", encoding="utf-8") as sf:
+                        s_content = sf.read().strip()
+                        if s_content:
+                            sdata = json.loads(s_content)
+                            if isinstance(sdata, dict):
+                                self.streak = int(sdata.get("streak", self.streak))
+                                if "window_position" in sdata and isinstance(sdata["window_position"], dict):
+                                    self.window_position = sdata["window_position"]
+                except Exception as se:
+                    print(f"[TaskStorage] State file read fallback: {se}")
+
             return list(self.tasks)
 
-    def _atomic_write_locked(self) -> bool:
-        """Internal helper to write self.tasks to disk atomically. Must be called with self._lock held."""
-        temp_path = f"{self.filepath}.tmp"
+    def _atomic_write_candidate(
+        self,
+        candidate_tasks: List[Dict[str, Any]],
+        candidate_streak: Optional[int] = None,
+        candidate_pos: Optional[Dict[str, int]] = None
+    ) -> bool:
+        """Internal helper to atomically write candidate payload to disk using fsync and replace."""
+        temp_dir = os.path.dirname(os.path.abspath(self.filepath)) or "."
+        temp_task_path = os.path.join(temp_dir, f".{os.path.basename(self.filepath)}.tmp.{uuid.uuid4().hex[:8]}")
+        temp_state_path = os.path.join(temp_dir, f".{os.path.basename(self.state_filepath)}.tmp.{uuid.uuid4().hex[:8]}")
+
+        target_streak = candidate_streak if candidate_streak is not None else self.streak
+        target_pos = candidate_pos if candidate_pos is not None else self.window_position
+
         try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(self.tasks, f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, self.filepath)
+            # 1. Write tasks file
+            with open(temp_task_path, "w", encoding="utf-8") as f:
+                json.dump(candidate_tasks, f, ensure_ascii=False, indent=2)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except (AttributeError, OSError):
+                    pass
+
+            # 2. Write state file
+            state_payload = {
+                "version": 1,
+                "streak": target_streak,
+                "window_position": target_pos
+            }
+            with open(temp_state_path, "w", encoding="utf-8") as sf:
+                json.dump(state_payload, sf, ensure_ascii=False, indent=2)
+                sf.flush()
+                try:
+                    os.fsync(sf.fileno())
+                except (AttributeError, OSError):
+                    pass
+
+            # 3. Atomic replacement
+            os.replace(temp_task_path, self.filepath)
+            os.replace(temp_state_path, self.state_filepath)
             return True
         except Exception as e:
-            print(f"[TaskStorage] Error saving {self.filepath}: {e}")
-            if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
+            print(f"[TaskStorage] Atomic transaction error saving {self.filepath}: {e}")
+            for p in (temp_task_path, temp_state_path):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
             return False
+
+    def _atomic_write_locked(self) -> bool:
+        """Compatibility helper to write current tasks and state atomically under lock."""
+        return self._atomic_write_candidate(self.tasks, candidate_streak=self.streak, candidate_pos=self.window_position)
 
     def save_tasks(self) -> bool:
         """Saves current tasks to disk in UTF-8 formatting atomically."""
         with self._lock:
-            return self._atomic_write_locked()
+            return self._atomic_write_candidate(self.tasks)
 
     def get_tasks(self, include_completed: bool = False) -> List[Dict[str, Any]]:
         """Returns the list of active tasks (or all tasks if include_completed is True)."""
@@ -296,13 +378,47 @@ class TaskStorage:
             return [dict(t) for t in self.tasks if t.get("status") != "completed"]
 
     def complete_task(self, task_id: str) -> bool:
-        """Marks a task as completed with timestamp and persists immediately."""
+        """Marks a task as completed with timestamp and atomic streak update. Idempotent on repeated calls."""
         with self._lock:
+            target_task = None
             for t in self.tasks:
                 if t.get("id") == task_id:
-                    t["status"] = "completed"
-                    t["completed_at"] = datetime.now().isoformat()
-                    return self._atomic_write_locked()
+                    target_task = t
+                    break
+            if not target_task:
+                return False
+
+            # Idempotency: if already completed, do not mutate state or double-increment streak
+            if target_task.get("status") == "completed":
+                return True
+
+            # Check overdue
+            was_overdue = False
+            deadline_at_str = target_task.get("deadline_at")
+            if deadline_at_str:
+                try:
+                    dt_deadline = parse_iso_datetime(deadline_at_str)
+                    if datetime.now() > dt_deadline:
+                        was_overdue = True
+                except Exception:
+                    pass
+
+            new_streak = 0 if was_overdue else (self.streak + 1)
+            now_iso = datetime.now().isoformat()
+
+            candidate_tasks = []
+            for t in self.tasks:
+                item = dict(t)
+                if item.get("id") == task_id:
+                    item["status"] = "completed"
+                    item["completed_at"] = now_iso
+                    item["was_overdue"] = was_overdue
+                candidate_tasks.append(item)
+
+            if self._atomic_write_candidate(candidate_tasks, candidate_streak=new_streak):
+                self.tasks = candidate_tasks
+                self.streak = new_streak
+                return True
             return False
 
     def add_task(
@@ -313,7 +429,7 @@ class TaskStorage:
         max_active: Optional[int] = None,
         allow_duplicate: bool = False
     ) -> Optional[Dict[str, Any]]:
-        """Parses raw text, appends the task record, and saves to disk atomically."""
+        """Validates and appends task record atomically. Rollback on disk failure guarantees zero memory corruption."""
         task_record = parse_task_input(raw_text, weight=weight, duration_minutes=duration_minutes)
         effective_limit = max_active if max_active is not None else getattr(self, "max_active", None)
         with self._lock:
@@ -321,12 +437,40 @@ class TaskStorage:
             if effective_limit is not None and len(active_tasks) >= effective_limit:
                 return None
             if not allow_duplicate:
-                target_title = task_record["title"].strip().lower()
-                if any(t.get("title", "").strip().lower() == target_title for t in active_tasks):
+                target_title = (task_record.get("stored_title") or task_record["title"]).strip().lower()
+                if any((t.get("stored_title") or t.get("title", "")).strip().lower() == target_title for t in active_tasks):
                     return None
-            self.tasks.append(task_record)
-            self._atomic_write_locked()
-        return task_record
+
+            candidate_tasks = [dict(t) for t in self.tasks]
+            candidate_tasks.append(task_record)
+            if self._atomic_write_candidate(candidate_tasks):
+                self.tasks = candidate_tasks
+                return task_record
+            return None
+
+    def get_streak(self) -> int:
+        with self._lock:
+            return self.streak
+
+    def set_streak(self, streak: int) -> bool:
+        with self._lock:
+            val = max(0, int(streak))
+            if self._atomic_write_candidate(self.tasks, candidate_streak=val):
+                self.streak = val
+                return True
+            return False
+
+    def get_window_position(self) -> Optional[Dict[str, int]]:
+        with self._lock:
+            return dict(self.window_position) if self.window_position else None
+
+    def set_window_position(self, x: int, y: int) -> bool:
+        with self._lock:
+            pos = {"x": int(x), "y": int(y)}
+            if self._atomic_write_candidate(self.tasks, candidate_pos=pos):
+                self.window_position = pos
+                return True
+            return False
 
 
 def parse_iso_datetime(iso_str: Optional[str], default: Optional[datetime] = None) -> datetime:

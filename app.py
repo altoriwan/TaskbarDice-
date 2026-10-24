@@ -12,9 +12,31 @@ def get_bundle_dir() -> str:
 
 
 def get_data_dir() -> str:
-    """Returns directory for writable persistent data files (tasks.json)."""
+    """Returns directory for writable persistent data files (tasks.json), with fallback to AppData."""
     if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
+        exe_dir = os.path.dirname(sys.executable)
+        # Check if exe_dir is writable (portable mode)
+        test_file = os.path.join(exe_dir, f".write_test_{os.getpid()}.tmp")
+        try:
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.remove(test_file)
+            return exe_dir
+        except (PermissionError, OSError):
+            # Fallback to %APPDATA%/TaskbarDice
+            appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+            target_dir = os.path.join(appdata, "TaskbarDice")
+            os.makedirs(target_dir, exist_ok=True)
+            # Migrate legacy tasks.json if it exists next to exe and not yet in target_dir
+            legacy_file = os.path.join(exe_dir, "tasks.json")
+            target_file = os.path.join(target_dir, "tasks.json")
+            if os.path.exists(legacy_file) and not os.path.exists(target_file):
+                try:
+                    import shutil
+                    shutil.copy2(legacy_file, target_file)
+                except Exception:
+                    pass
+            return target_dir
     return os.path.dirname(os.path.abspath(__file__))
 
 
@@ -36,8 +58,8 @@ class TaskbarDiceAPI:
         # Check active tasks for duplicate title
         active_tasks = self.storage.get_tasks()
         candidate = parse_task_input(text, weight=weight, duration_minutes=duration_minutes)
-        norm_title = candidate["title"].strip().lower()
-        if any(t.get("title", "").strip().lower() == norm_title for t in active_tasks):
+        norm_title = (candidate.get("stored_title") or candidate["title"]).strip().lower()
+        if any(((t.get("stored_title") or t.get("title", "")).strip().lower() == norm_title) for t in active_tasks):
             print(f"[TaskbarDice] Rejecting task: Duplicate active task '{candidate['title']}'")
             return {
                 "status": "error",
@@ -97,7 +119,27 @@ class TaskbarDiceAPI:
         print(f"[TaskbarDice] Task completed: '{task_id}', success: {success}, was_overdue: {was_overdue}")
         if not success:
             return {"status": "not_found", "task_id": task_id}
-        return {"status": "ok", "task_id": task_id, "was_overdue": was_overdue}
+        return {
+            "status": "ok",
+            "task_id": task_id,
+            "was_overdue": was_overdue,
+            "streak": self.storage.get_streak()
+        }
+
+    def get_streak(self):
+        return {"status": "ok", "streak": self.storage.get_streak()}
+
+    def set_streak(self, streak: int):
+        success = self.storage.set_streak(streak)
+        return {"status": "ok" if success else "error", "streak": self.storage.get_streak()}
+
+    def get_window_position(self):
+        pos = self.storage.get_window_position()
+        return {"status": "ok", "position": pos}
+
+    def save_window_position(self, x: int, y: int):
+        success = self.storage.set_window_position(x, y)
+        return {"status": "ok" if success else "error"}
 
     def set_scale(self, scale: float):
         try:
@@ -176,7 +218,22 @@ def calculate_anchor_position(width: int = 400, height: int = 420, margin_x: int
 def main():
     api = TaskbarDiceAPI()
     win_w, win_h = 400, 420
-    x, y = calculate_anchor_position(win_w, win_h)
+    saved_pos = api.storage.get_window_position()
+    if saved_pos and "x" in saved_pos and "y" in saved_pos:
+        candidate_x = saved_pos["x"]
+        candidate_y = saved_pos["y"]
+        is_visible = False
+        try:
+            for s in webview.screens:
+                if (s.x <= candidate_x <= s.x + s.width - 50 and
+                    s.y <= candidate_y <= s.y + s.height - 50):
+                    is_visible = True
+                    break
+        except Exception:
+            is_visible = True
+        x, y = (candidate_x, candidate_y) if is_visible else calculate_anchor_position(win_w, win_h)
+    else:
+        x, y = calculate_anchor_position(win_w, win_h)
 
     bundle_dir = get_bundle_dir()
     html_path = os.path.join(bundle_dir, "static", "index.html")
@@ -193,6 +250,17 @@ def main():
         js_api=api
     )
     api.set_window(window)
+
+    def on_moved(new_x, new_y):
+        try:
+            api.storage.set_window_position(new_x, new_y)
+        except Exception:
+            pass
+
+    try:
+        window.events.moved += on_moved
+    except Exception as me:
+        print(f"[TaskbarDice] Event moved hook fallback: {me}")
 
     def on_loaded(w):
         try:
