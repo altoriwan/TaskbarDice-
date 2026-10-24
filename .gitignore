@@ -13,6 +13,23 @@ env/
 scratch/
 *.bak
 *.tmp
+push_to_github.bat
+
+# AI Agent Framework & Internal Scaffolding
+.agents/
+GEMINI.md
+ORIGINAL_REQUEST.md
+TEST_READY.md
+test_trace.bat
+tests/
+app/
+data/
+main.py
+static/index.cannon.html
+static/taskbar_dice.html
+static/css/
+static/js/
+static/vendor/
 
 # Operating System Files
 Thumbs.db

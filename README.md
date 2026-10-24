@@ -29,7 +29,14 @@
 - Python 3.10+
 - Microsoft Edge WebView2 Runtime (pre-installed on Windows 10/11)
 
-### 2. Installation
+### 2. Run Directly (1-Click on Windows)
+Simply double-click `run.bat` or run in terminal:
+```powershell
+.\run.bat
+```
+*(The script will automatically set up the virtual environment, install dependencies, and launch the widget).*
+
+### 3. Manual Setup (Alternative)
 ```powershell
 # Clone the repository
 git clone https://github.com/altoriwan/TaskbarDice-.git
@@ -41,29 +48,22 @@ python -m venv venv
 
 # Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Run Application
-```powershell
+# Launch application
 python app.py
 ```
 
 ---
 
-## 🧪 Running Tests
+## 🎮 Controls
 
-```powershell
-# Run E2E Acceptance Probe
-python tests/test_e2e_probe.py
-
-# Run Full Test Suite
-python -m unittest discover tests
-
-# Run JavaScript & Adversarial VM Probes
-node tests/verify_js_m3.js
-node tests/test_adversarial_m3_tooltip.js
-node tests/test_adversarial_m3_rot.js
-```
+| Action | Control |
+|---|---|
+| **Add Task** | Type task into the input box, select Weight (`W`) & Time (`T`), then press `Enter` or click `ADD` |
+| **Inspect Task** | Hover mouse cursor over any resting die on the stack |
+| **Complete Task** | Double-click any resting die to open the anti-slacking confirmation dialog |
+| **Move Window** | Click and drag the top title header (`TASKBAR DICE`) |
+| **Close Window** | Click the red `X` button at the top right |
 
 ---
 
