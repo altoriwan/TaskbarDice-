@@ -66,11 +66,6 @@
       letter-spacing: 1px;
     }
 
-    .rot-badge {
-      font-size: 7px;
-      color: #f7d51d;
-      margin-right: 8px;
-    }
 
     .btn-close {
       cursor: pointer;
@@ -334,7 +329,6 @@
   <!-- Frameless Drag Header & Controls (26px) -->
   <div class="drag-header pywebview-drag-region">
     <div class="drag-region">TASKBAR DICE :: M1</div>
-    <span id="rotStatusBadge" class="rot-badge">[D] REALTIME</span>
     <button class="btn-close" id="closeBtn" title="Close Window" type="button">X</button>
   </div>
 
@@ -399,7 +393,6 @@
     ctx.imageSmoothingEnabled = false;
 
     const feedbackToast = document.getElementById('feedbackToast');
-    const rotStatusBadge = document.getElementById('rotStatusBadge');
 
     function showToast(msg) {
       feedbackToast.textContent = msg;
@@ -535,9 +528,6 @@
     // Hover inspection state
     let hoveredDie = null;
     let mousePos = { x: -1, y: -1 };
-
-    // Developer Speed-Test Mode state
-    let devMode = 0;
 
     // Particle Pools & Zero-Allocation Recycling Pools (60 FPS & Zero GC Churn)
     const MAX_SLIME_DRIPS = 80;
@@ -735,17 +725,17 @@
 
     /**
      * Computes effective rot_factor (unclamped >= 0.0 for overdue tracking)
+     * strictly based on natural real-time countdown to deadline:
+     * rot = (now - created_at) / (deadline_at - created_at)
+     * - rot < 0.2: Stage 1 (Pristine Ivory)
+     * - rot < 0.4: Stage 2 (Fading Sandy Yellow)
+     * - rot < 0.6: Stage 3 (Cracked Stone)
+     * - rot < 0.8: Stage 4 (Mossy Decay)
+     * - rot >= 0.8: Stage 5 (Toxic Necrotic Slime & Overdue)
      */
     function getEffectiveRotFactor(die) {
-      if (devMode === 1) return 0.10;
-      if (devMode === 2) return 0.30;
-      if (devMode === 3) return 0.50;
-      if (devMode === 4) return 0.70;
-      if (devMode === 5) return 0.90;
-      if (devMode === 6) return 1.25;
-
-      if (!die.created_at || !die.deadline_at) {
-        return 0.2;
+      if (!die || !die.created_at || !die.deadline_at) {
+        return 0.0;
       }
 
       const createdTime = new Date(die.created_at).getTime();
@@ -2979,26 +2969,6 @@
     cancelCompleteBtn.addEventListener('click', () => {
       modalOverlay.style.display = 'none';
       selectedTask = null;
-    });
-
-    // Developer Speed-Test Mode listener (Key 'D')
-    window.addEventListener('keydown', (e) => {
-      if (e.target === taskInput) return;
-
-      if (e.key === 'd' || e.key === 'D') {
-        devMode = (devMode + 1) % 7;
-        let modeLabel = '';
-        if (devMode === 0) modeLabel = '[D] REALTIME';
-        else if (devMode === 1) modeLabel = '[D] STAGE 1 (IVORY)';
-        else if (devMode === 2) modeLabel = '[D] STAGE 2 (SANDY)';
-        else if (devMode === 3) modeLabel = '[D] STAGE 3 (CRACKED)';
-        else if (devMode === 4) modeLabel = '[D] STAGE 4 (MOSSY)';
-        else if (devMode === 5) modeLabel = '[D] STAGE 5 (NECROTIC)';
-        else if (devMode === 6) modeLabel = '[D] STAGE 5 (OVERDUE)';
-
-        rotStatusBadge.textContent = modeLabel;
-        showToast(modeLabel);
-      }
     });
 
     // Close button
