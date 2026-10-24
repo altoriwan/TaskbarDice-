@@ -323,6 +323,87 @@
       font-size: 6px !important;
       padding: 6px 8px !important;
     }
+
+    /* Custom Deadline Modal Styling */
+    .custom-time-modal-box {
+      width: 90%;
+      max-width: 320px !important;
+      padding: 10px 12px !important;
+    }
+
+    .custom-time-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin: 6px 0;
+    }
+
+    .custom-time-input {
+      width: 68px !important;
+      height: 26px !important;
+      font-size: 8px !important;
+      text-align: center !important;
+      padding: 2px 4px !important;
+      line-height: 22px !important;
+    }
+
+    .custom-unit-group {
+      display: flex;
+      gap: 3px;
+    }
+
+    .custom-unit-btn {
+      font-size: 7px;
+      padding: 3px 5px;
+      min-width: 22px;
+      cursor: pointer;
+    }
+
+    .custom-unit-btn.is-active {
+      background: #f7d51d !important;
+      color: #000000 !important;
+      font-weight: bold;
+    }
+
+    .custom-quick-pills {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      margin: 4px 0 6px 0;
+      flex-wrap: wrap;
+    }
+
+    .quick-pill-label {
+      font-size: 6px;
+      color: #888888;
+    }
+
+    .quick-time-pill {
+      font-size: 6px;
+      padding: 2px 4px;
+      cursor: pointer;
+      color: #aaaaaa;
+    }
+
+    .quick-time-pill:hover {
+      background: #333a42;
+      color: #ffd700;
+    }
+
+    .custom-time-preview-badge {
+      font-size: 7px;
+      color: #ffd700;
+      background: #0d0f12;
+      border: 1px dashed #ffd700;
+      padding: 4px 6px;
+      margin: 4px auto 6px auto;
+      display: block;
+      width: 92%;
+      box-sizing: border-box;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
 <body>
@@ -386,6 +467,51 @@
       <div class="modal-actions">
         <button type="button" id="confirmCompleteBtn" class="nes-btn is-success btn-modal">YES, COMPLETED!</button>
         <button type="button" id="cancelCompleteBtn" class="nes-btn is-error btn-modal">NOT YET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Deadline Retro Modal -->
+  <div id="customTimeModal" class="modal-overlay">
+    <div class="nes-dialog is-dark modal-box custom-time-modal-box">
+      <p class="modal-title">CUSTOM DEADLINE</p>
+      <p class="modal-subtext" style="margin-bottom: 6px;">ENTER DURATION & SELECT UNIT:</p>
+      
+      <div class="custom-time-row">
+        <input 
+          type="text" 
+          id="customDurationVal" 
+          class="nes-input is-dark custom-time-input" 
+          value="3" 
+          placeholder="3" 
+          autocomplete="off"
+        />
+        <div class="custom-unit-group" id="customUnitGroup">
+          <button type="button" class="btn-chip custom-unit-btn" data-unit="m">m</button>
+          <button type="button" class="btn-chip custom-unit-btn" data-unit="h">h</button>
+          <button type="button" class="btn-chip custom-unit-btn is-active" data-unit="d">d</button>
+          <button type="button" class="btn-chip custom-unit-btn" data-unit="w">w</button>
+          <button type="button" class="btn-chip custom-unit-btn" data-unit="mo">mo</button>
+        </div>
+      </div>
+
+      <div class="custom-quick-pills">
+        <span class="quick-pill-label">QUICK:</span>
+        <button type="button" class="btn-chip quick-time-pill" data-val="12h">12h</button>
+        <button type="button" class="btn-chip quick-time-pill" data-val="3d">3d</button>
+        <button type="button" class="btn-chip quick-time-pill" data-val="5d">5d</button>
+        <button type="button" class="btn-chip quick-time-pill" data-val="2w">2w</button>
+        <button type="button" class="btn-chip quick-time-pill" data-val="1mo">1mo</button>
+      </div>
+
+      <!-- Live Preview Badge -->
+      <div id="customDurationPreview" class="custom-time-preview-badge">
+        DEADLINE: 3 DAYS (3d)
+      </div>
+
+      <div class="modal-actions" style="margin-top: 8px;">
+        <button type="button" id="confirmCustomTimeBtn" class="nes-btn is-success btn-modal">CONFIRM</button>
+        <button type="button" id="cancelCustomTimeBtn" class="nes-btn is-error btn-modal">CANCEL</button>
       </div>
     </div>
   </div>
@@ -2606,22 +2732,179 @@
       return `${mins}m`;
     }
 
+    function formatHumanPreview(mins) {
+      if (mins >= 43200 && mins % 43200 === 0) return `${mins / 43200} MONTH${mins / 43200 > 1 ? 'S' : ''}`;
+      if (mins >= 10080 && mins % 10080 === 0) return `${mins / 10080} WEEK${mins / 10080 > 1 ? 'S' : ''}`;
+      if (mins >= 1440 && mins % 1440 === 0) return `${mins / 1440} DAY${mins / 1440 > 1 ? 'S' : ''}`;
+      if (mins >= 60 && mins % 60 === 0) return `${mins / 60} HOUR${mins / 60 > 1 ? 'S' : ''}`;
+      if (mins >= 43200) return `${(mins / 43200).toFixed(1)} MONTHS`;
+      if (mins >= 10080) return `${(mins / 10080).toFixed(1)} WEEKS`;
+      if (mins >= 1440) return `${(mins / 1440).toFixed(1)} DAYS`;
+      if (mins >= 60) return `${(mins / 60).toFixed(1)} HOURS`;
+      return `${mins} MINUTES`;
+    }
+
+    const customTimeModal = document.getElementById('customTimeModal');
+    const customDurationVal = document.getElementById('customDurationVal');
+    const customDurationPreview = document.getElementById('customDurationPreview');
+    const confirmCustomTimeBtn = document.getElementById('confirmCustomTimeBtn');
+    const cancelCustomTimeBtn = document.getElementById('cancelCustomTimeBtn');
+    const customUnitBtns = document.querySelectorAll('.custom-unit-btn');
+    const quickTimePills = document.querySelectorAll('.quick-time-pill');
+
+    let activeCustomUnit = 'd';
+
+    function updateCustomPreview() {
+      if (!customDurationVal) return null;
+      const raw = (customDurationVal.value || '').trim();
+      if (!raw) {
+        if (customDurationPreview) {
+          customDurationPreview.textContent = 'ENTER DURATION ABOVE';
+          customDurationPreview.style.borderColor = '#888888';
+          customDurationPreview.style.color = '#888888';
+        }
+        return null;
+      }
+
+      // Check if raw has explicit unit or is pure number
+      const s = raw.toLowerCase();
+      const match = s.match(/^(\d+(?:\.\d+)?)\s*([a-zà-ỹ]+)?$/i);
+      let parsed = null;
+      if (match) {
+        const val = parseFloat(match[1]);
+        const explicitUnit = match[2];
+        if (explicitUnit) {
+          parsed = parseCustomDuration(raw);
+        } else if (!isNaN(val) && val > 0) {
+          parsed = parseCustomDuration(`${val}${activeCustomUnit}`);
+        }
+      } else {
+        parsed = parseCustomDuration(raw);
+      }
+
+      if (parsed && parsed.minutes > 0) {
+        const matchUnit = parsed.label.match(/[a-z]+/);
+        if (matchUnit) {
+          const u = matchUnit[0];
+          activeCustomUnit = u;
+          customUnitBtns.forEach(btn => {
+            btn.classList.toggle('is-active', btn.dataset.unit === u);
+          });
+        }
+        if (customDurationPreview) {
+          customDurationPreview.textContent = `DEADLINE: ${formatHumanPreview(parsed.minutes)} (${parsed.label})`;
+          customDurationPreview.style.borderColor = '#ffd700';
+          customDurationPreview.style.color = '#ffd700';
+        }
+        return parsed;
+      } else {
+        if (customDurationPreview) {
+          customDurationPreview.textContent = 'INVALID DURATION (VD: 3, 45m, 2h)';
+          customDurationPreview.style.borderColor = '#e76e55';
+          customDurationPreview.style.color = '#e76e55';
+        }
+        return null;
+      }
+    }
+
+    function openCustomModal() {
+      if (customTimeModal) {
+        customTimeModal.style.display = 'flex';
+        updateCustomPreview();
+        setTimeout(() => {
+          if (customDurationVal) {
+            customDurationVal.focus();
+            if (typeof customDurationVal.select === 'function') {
+              customDurationVal.select();
+            }
+          }
+        }, 50);
+      }
+    }
+
+    function closeCustomModal() {
+      if (customTimeModal) {
+        customTimeModal.style.display = 'none';
+      }
+    }
+
+    function confirmCustomDeadline() {
+      const parsed = updateCustomPreview();
+      if (parsed && parsed.minutes > 0) {
+        timeButtons.forEach(b => b.classList.remove('is-active'));
+        if (customTimeBtn) {
+          customTimeBtn.classList.add('is-active');
+          customTimeBtn.textContent = parsed.label;
+        }
+        selectedDurationMinutes = parsed.minutes;
+        closeCustomModal();
+        showToast(`DEADLINE SET: ${parsed.label.toUpperCase()}`);
+        return true;
+      } else {
+        showToast('INVALID DURATION');
+        return false;
+      }
+    }
+
+    if (customDurationVal) {
+      customDurationVal.addEventListener('input', () => {
+        updateCustomPreview();
+      });
+      customDurationVal.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmCustomDeadline();
+        } else if (e.key === 'Escape') {
+          closeCustomModal();
+        }
+      });
+    }
+
+    customUnitBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCustomUnit = btn.dataset.unit;
+        customUnitBtns.forEach(b => b.classList.toggle('is-active', b === btn));
+        if (customDurationVal) {
+          const raw = (customDurationVal.value || '').trim();
+          const numMatch = raw.match(/^\d+(\.\d+)?/);
+          if (numMatch) {
+            customDurationVal.value = numMatch[0];
+          }
+        }
+        updateCustomPreview();
+      });
+    });
+
+    quickTimePills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        if (customDurationVal) {
+          customDurationVal.value = pill.dataset.val;
+        }
+        updateCustomPreview();
+      });
+    });
+
+    if (confirmCustomTimeBtn) {
+      confirmCustomTimeBtn.addEventListener('click', confirmCustomDeadline);
+    }
+
+    if (cancelCustomTimeBtn) {
+      cancelCustomTimeBtn.addEventListener('click', closeCustomModal);
+    }
+
+    if (customTimeModal) {
+      customTimeModal.addEventListener('click', (e) => {
+        if (e.target === customTimeModal) {
+          closeCustomModal();
+        }
+      });
+    }
+
     timeButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const tVal = btn.dataset.t;
         if (tVal === 'custom') {
-          const customPrompt = prompt('Nhập deadline (VD: 30m, 2h, 3d, 1w, 1mo):', '3d');
-          if (customPrompt !== null) {
-            const parsed = parseCustomDuration(customPrompt);
-            if (parsed && parsed.minutes > 0) {
-              timeButtons.forEach(b => b.classList.remove('is-active'));
-              btn.classList.add('is-active');
-              btn.textContent = parsed.label;
-              selectedDurationMinutes = parsed.minutes;
-            } else {
-              showToast('INVALID DURATION');
-            }
-          }
+          openCustomModal();
         } else {
           timeButtons.forEach(b => b.classList.remove('is-active'));
           btn.classList.add('is-active');
@@ -2646,6 +2929,12 @@
     };
     window.getSelectedWeight = () => selectedWeight;
     window.getSelectedDuration = () => selectedDurationMinutes;
+    window.openCustomTimeModal = openCustomModal;
+    window.closeCustomTimeModal = closeCustomModal;
+    window.confirmCustomDeadline = confirmCustomDeadline;
+    window.updateCustomPreview = updateCustomPreview;
+    window.getCustomDurationVal = () => customDurationVal;
+    window.getCustomTimeModal = () => customTimeModal;
 
     // Form submission
     const taskForm = document.getElementById('taskForm');
