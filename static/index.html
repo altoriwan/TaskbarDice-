@@ -368,7 +368,10 @@
         <button type="button" class="btn-chip time-btn is-active" data-t="25m">25m</button>
         <button type="button" class="btn-chip time-btn" data-t="1h">1h</button>
         <button type="button" class="btn-chip time-btn" data-t="4h">4h</button>
-        <button type="button" class="btn-chip time-btn" data-t="custom" id="customTimeBtn">..m</button>
+        <button type="button" class="btn-chip time-btn" data-t="1d">1d</button>
+        <button type="button" class="btn-chip time-btn" data-t="1w">1w</button>
+        <button type="button" class="btn-chip time-btn" data-t="1mo">1mo</button>
+        <button type="button" class="btn-chip time-btn" data-t="custom" id="customTimeBtn">..</button>
       </div>
     </div>
   </form>
@@ -2562,21 +2565,61 @@
       if (tStr === '25m') return 25;
       if (tStr === '1h') return 60;
       if (tStr === '4h') return 240;
+      if (tStr === '1d') return 1440;
+      if (tStr === '3d') return 4320;
+      if (tStr === '1w') return 10080;
+      if (tStr === '1mo') return 43200;
       return null;
+    }
+
+    function parseCustomDuration(inputStr) {
+      if (!inputStr) return null;
+      const s = inputStr.trim().toLowerCase();
+      const match = s.match(/^(\d+(?:\.\d+)?)\s*(m|min|mins|phut|p|h|hr|hrs|gio|tieng|d|day|days|ngay|w|wk|wks|week|weeks|tuan|mo|month|months|thang)?$/);
+      if (!match) return null;
+      const val = parseFloat(match[1]);
+      if (isNaN(val) || val <= 0) return null;
+      const unit = match[2] || 'm';
+      if (['m', 'min', 'mins', 'phut', 'p'].includes(unit)) {
+        return { minutes: Math.round(val), label: `${Math.round(val)}m` };
+      }
+      if (['h', 'hr', 'hrs', 'gio', 'tieng'].includes(unit)) {
+        return { minutes: Math.round(val * 60), label: `${val}h` };
+      }
+      if (['d', 'day', 'days', 'ngay'].includes(unit)) {
+        return { minutes: Math.round(val * 1440), label: `${val}d` };
+      }
+      if (['w', 'wk', 'wks', 'week', 'weeks', 'tuan'].includes(unit)) {
+        return { minutes: Math.round(val * 10080), label: `${val}w` };
+      }
+      if (['mo', 'month', 'months', 'thang'].includes(unit)) {
+        return { minutes: Math.round(val * 43200), label: `${val}mo` };
+      }
+      return { minutes: Math.round(val), label: `${Math.round(val)}m` };
+    }
+
+    function formatDurationMinutesClient(mins) {
+      if (mins >= 43200 && mins % 43200 === 0) return `${mins / 43200} tháng`;
+      if (mins >= 10080 && mins % 10080 === 0) return `${mins / 10080} tuần`;
+      if (mins >= 1440 && mins % 1440 === 0) return `${mins / 1440} ngày`;
+      if (mins >= 60 && mins % 60 === 0) return `${mins / 60} giờ`;
+      return `${mins}m`;
     }
 
     timeButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const tVal = btn.dataset.t;
         if (tVal === 'custom') {
-          const customPrompt = prompt('Enter custom duration in minutes (1 - 1440):', '30');
+          const customPrompt = prompt('Nhập deadline (VD: 30m, 2h, 3d, 1w, 1mo):', '3d');
           if (customPrompt !== null) {
-            const mins = parseInt(customPrompt, 10);
-            if (!isNaN(mins) && mins > 0 && mins <= 1440) {
+            const parsed = parseCustomDuration(customPrompt);
+            if (parsed && parsed.minutes > 0) {
               timeButtons.forEach(b => b.classList.remove('is-active'));
               btn.classList.add('is-active');
-              btn.textContent = `${mins}m`;
-              selectedDurationMinutes = mins;
+              btn.textContent = parsed.label;
+              selectedDurationMinutes = parsed.minutes;
+            } else {
+              showToast('INVALID DURATION');
             }
           }
         } else {
@@ -2613,6 +2656,21 @@
       const text = taskInput.value.trim();
       if (!text) return;
 
+      // Duplicate Task Validation (Case-insensitive check against active diceStack)
+      const normInput = text.toLowerCase();
+      const isDuplicate = diceStack.some(d => (d.title || '').trim().toLowerCase() === normInput);
+      if (isDuplicate) {
+        const panel = document.querySelector('.control-panel') || document.querySelector('.bottom-bar');
+        if (panel) {
+          panel.classList.remove('shake-anim');
+          void panel.offsetWidth; // trigger reflow
+          panel.classList.add('shake-anim');
+        }
+        showToast('TASK ALREADY ACTIVE!');
+        triggerScreenShake(3, 2);
+        return;
+      }
+
       hasHadTasks = true;
       hasClearedAll = false;
 
@@ -2637,6 +2695,15 @@
           if (res && res.status === 'ok' && res.task) {
             addDieToStack(res.task, false);
             showToast(`+${res.task.title.substring(0, 8)} (W:${res.task.weight_score})`);
+          } else if (res && res.error === 'duplicate') {
+            const panel = document.querySelector('.control-panel') || document.querySelector('.bottom-bar');
+            if (panel) {
+              panel.classList.remove('shake-anim');
+              void panel.offsetWidth;
+              panel.classList.add('shake-anim');
+            }
+            showToast('DUPLICATE TASK!');
+            triggerScreenShake(3, 2);
           } else if (res && res.error === 'overload') {
             const panel = document.querySelector('.control-panel') || document.querySelector('.bottom-bar');
             if (panel) {
@@ -2655,7 +2722,7 @@
           id: Math.random().toString(36).substring(2, 6),
           title: text,
           weight_score: selectedWeight,
-          deadline_str: `${selectedDurationMinutes}m`,
+          deadline_str: formatDurationMinutesClient(selectedDurationMinutes),
           created_at: new Date().toISOString(),
           deadline_at: new Date(Date.now() + selectedDurationMinutes * 60000).toISOString()
         };
@@ -2696,6 +2763,34 @@
     });
 
     /**
+     * Formats seconds duration dynamically into retro units:
+     * - >= 30 days: Xmo Yd or Xmo
+     * - >= 1 day: Xd Yh Zm
+     * - >= 1 hour: Xh Ym Zs
+     * - < 1 hour: Xm Ys
+     */
+    function formatCountdownDuration(diffSec) {
+      const days = Math.floor(diffSec / 86400);
+      const remSec = diffSec % 86400;
+      const hours = Math.floor(remSec / 3600);
+      const mins = Math.floor((remSec % 3600) / 60);
+      const secs = remSec % 60;
+
+      if (days >= 30) {
+        const months = Math.floor(days / 30);
+        const remDays = days % 30;
+        return remDays > 0 ? `${months}mo ${remDays}d` : `${months}mo`;
+      }
+      if (days > 0) {
+        return `${days}d ${hours}h ${mins}m`;
+      }
+      if (hours > 0) {
+        return `${hours}h ${mins}m ${secs}s`;
+      }
+      return `${mins}m ${secs}s`;
+    }
+
+    /**
      * Draws floating retro inspection tooltip with full title word wrapping,
      * weight, rot stage [X/5], countdown timer (CÒN / blinking red QUÁ HẠN),
      * and smart 4-way clamping inside 400x320 canvas.
@@ -2712,7 +2807,8 @@
       const diffSec = Math.floor(Math.abs(deadlineTime - now) / 1000);
       const m = Math.floor(diffSec / 60);
       const s = diffSec % 60;
-      const timeStr = isOverdue ? `QUÁ HẠN: +${m}m ${s}s` : `CÒN: ${m}m ${s}s`;
+      // Formatted countdown: CÒN: ${m}m ${s}s or QUÁ HẠN: +${m}m ${s}s (scales dynamically via formatCountdownDuration)
+      const timeStr = isOverdue ? `QUÁ HẠN: +${formatCountdownDuration(diffSec)}` : `CÒN: ${formatCountdownDuration(diffSec)}`;
 
       c.save();
       c.font = '6px "Press Start 2P"';

@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 from typing import Optional, Dict, Any
 import webview
-from dice_logic import TaskStorage
+from dice_logic import TaskStorage, parse_task_input
 
 
 class TaskbarDiceAPI:
@@ -19,6 +19,20 @@ class TaskbarDiceAPI:
 
     def add_task(self, text: str, weight: Optional[int] = None, duration_minutes: Optional[int] = None):
         max_active = getattr(self.storage, "MAX_ACTIVE_TASKS", 10)
+
+        # Check active tasks for duplicate title
+        active_tasks = self.storage.get_tasks()
+        candidate = parse_task_input(text, weight=weight, duration_minutes=duration_minutes)
+        norm_title = candidate["title"].strip().lower()
+        if any(t.get("title", "").strip().lower() == norm_title for t in active_tasks):
+            print(f"[TaskbarDice] Rejecting task: Duplicate active task '{candidate['title']}'")
+            return {
+                "status": "error",
+                "error": "duplicate",
+                "code": "duplicate",
+                "message": f"Task '{candidate['title']}' already exists in active tower"
+            }
+
         task = self.storage.add_task(
             text,
             weight=weight,

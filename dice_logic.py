@@ -10,6 +10,31 @@ from typing import Dict, List, Any, Optional
 MAX_DURATION_MINUTES = 52_560_000  # Defensive clamp: ~100 years
 
 
+def format_duration_minutes(minutes: int) -> str:
+    """Formats a duration in minutes into a human-readable Vietnamese time string."""
+    if minutes == 15:
+        return "15 phút"
+    if minutes == 25:
+        return "25 phút"
+    if minutes == 60:
+        return "1 giờ"
+    if minutes == 240:
+        return "4 giờ"
+    # Months (30 days = 43200 minutes)
+    if minutes >= 43200 and minutes % 43200 == 0:
+        return f"{minutes // 43200} tháng"
+    # Weeks (7 days = 10080 minutes)
+    if minutes >= 10080 and minutes % 10080 == 0:
+        return f"{minutes // 10080} tuần"
+    # Days (1440 minutes)
+    if minutes >= 1440 and minutes % 1440 == 0:
+        return f"{minutes // 1440} ngày"
+    # Hours (60 minutes)
+    if minutes >= 60 and minutes % 60 == 0:
+        return f"{minutes // 60} giờ"
+    return f"{minutes} phút"
+
+
 def sanitize_input(text: Any) -> str:
     """Removes control characters and strips surrounding whitespace."""
     if not isinstance(text, str):
@@ -59,18 +84,7 @@ def parse_task_input(
                 deadline_dt = now + timedelta(minutes=explicit_duration)
             except OverflowError:
                 deadline_dt = datetime.max
-            if explicit_duration == 15:
-                deadline_str = "15 phút"
-            elif explicit_duration == 25:
-                deadline_str = "25 phút"
-            elif explicit_duration == 60:
-                deadline_str = "1 giờ"
-            elif explicit_duration == 240:
-                deadline_str = "4 giờ"
-            elif explicit_duration % 60 == 0:
-                deadline_str = f"{explicit_duration // 60} giờ"
-            else:
-                deadline_str = f"{explicit_duration} phút"
+            deadline_str = format_duration_minutes(explicit_duration)
         else:
             deadline_dt = now + timedelta(hours=4)
             deadline_str = "Hôm nay"
@@ -92,9 +106,12 @@ def parse_task_input(
     has_today = bool(re.search(r"\b(hôm nay|hom nay|chiều nay|chieu nay|tối nay|toi nay|sáng nay|sang nay|trưa nay|today|tonight)\b", lower))
     has_tomorrow = bool(re.search(r"\b(ngày mai|ngay mai|mai|tomorrow|sáng mai|sang mai|chiều mai|chieu mai|tối mai|toi mai)\b", lower))
 
-    # Detect duration / scope markers
+    # Detect duration / scope markers (including days, weeks, months)
     minute_match = re.search(r"(\d+)\s*(?:p|phút|phut|min|mins|m)\b", lower)
     hour_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:h|tiếng|tieng|giờ|gio|hrs?|hours?)\b", lower)
+    day_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:d|ngày|ngay|days?)\b", lower)
+    week_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:w|tuần|tuan|weeks?)\b", lower)
+    month_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:mo|tháng|thang|months?)\b", lower)
     has_week_or_report = bool(re.search(r"\b(tuần|tuan|week|tháng|thang|month|báo cáo|bao cao|report)\b", lower))
     has_system_bug = bool(re.search(r"\b(bug|fix bug|hệ thống|he thong|database|deploy|server|refactor)\b", lower))
     has_casual_activity = bool(re.search(r"\b(đọc sách|doc sach|sách|sach|uống nước|di dao|chay bo|nghi ngoi)\b", lower))
@@ -105,6 +122,15 @@ def parse_task_input(
         deadline_str = f"{minute_match.group(1)} phút"
     elif hour_match:
         deadline_str = f"{hour_match.group(1)} giờ"
+    elif day_match:
+        val = float(day_match.group(1))
+        deadline_str = f"{int(val) if val.is_integer() else val} ngày"
+    elif week_match:
+        val = float(week_match.group(1))
+        deadline_str = f"{int(val) if val.is_integer() else val} tuần"
+    elif month_match:
+        val = float(month_match.group(1))
+        deadline_str = f"{int(val) if val.is_integer() else val} tháng"
     elif has_tomorrow:
         deadline_str = "Ngày mai"
     elif has_today:
@@ -158,6 +184,15 @@ def parse_task_input(
         elif hour_match:
             hrs = min(float(hour_match.group(1)), 876_000.0)
             deadline_dt = now + timedelta(hours=hrs)
+        elif day_match:
+            days = min(float(day_match.group(1)), 36500.0)
+            deadline_dt = now + timedelta(days=days)
+        elif week_match:
+            weeks = min(float(week_match.group(1)), 5200.0)
+            deadline_dt = now + timedelta(weeks=weeks)
+        elif month_match:
+            months = min(float(month_match.group(1)), 1200.0)
+            deadline_dt = now + timedelta(days=months * 30.0)
         elif has_tomorrow:
             deadline_dt = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
         elif has_today:
@@ -179,18 +214,7 @@ def parse_task_input(
             deadline_dt = now + timedelta(minutes=explicit_duration)
         except OverflowError:
             deadline_dt = datetime.max
-        if explicit_duration == 15:
-            deadline_str = "15 phút"
-        elif explicit_duration == 25:
-            deadline_str = "25 phút"
-        elif explicit_duration == 60:
-            deadline_str = "1 giờ"
-        elif explicit_duration == 240:
-            deadline_str = "4 giờ"
-        elif explicit_duration % 60 == 0:
-            deadline_str = f"{explicit_duration // 60} giờ"
-        else:
-            deadline_str = f"{explicit_duration} phút"
+        deadline_str = format_duration_minutes(explicit_duration)
 
     deadline_at = deadline_dt.isoformat()
 
@@ -286,15 +310,19 @@ class TaskStorage:
         raw_text: str,
         weight: Optional[int] = None,
         duration_minutes: Optional[int] = None,
-        max_active: Optional[int] = None
+        max_active: Optional[int] = None,
+        allow_duplicate: bool = False
     ) -> Optional[Dict[str, Any]]:
         """Parses raw text, appends the task record, and saves to disk atomically."""
         task_record = parse_task_input(raw_text, weight=weight, duration_minutes=duration_minutes)
         effective_limit = max_active if max_active is not None else getattr(self, "max_active", None)
         with self._lock:
-            if effective_limit is not None:
-                active_tasks = [t for t in self.tasks if t.get("status") != "completed"]
-                if len(active_tasks) >= effective_limit:
+            active_tasks = [t for t in self.tasks if t.get("status") != "completed"]
+            if effective_limit is not None and len(active_tasks) >= effective_limit:
+                return None
+            if not allow_duplicate:
+                target_title = task_record["title"].strip().lower()
+                if any(t.get("title", "").strip().lower() == target_title for t in active_tasks):
                     return None
             self.tasks.append(task_record)
             self._atomic_write_locked()
