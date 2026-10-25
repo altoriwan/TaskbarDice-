@@ -239,7 +239,7 @@ def main():
     html_path = os.path.join(bundle_dir, "static", "index.html")
 
     window = webview.create_window(
-        title="TaskbarDice",
+        title="Block Void",
         url=html_path,
         width=win_w,
         height=win_h,

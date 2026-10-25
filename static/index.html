@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TaskbarDice - Milestone 4: Game Loop & Victory</title>
+  <title>Block Void</title>
   
   <!-- Google Font: Press Start 2P -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,8 +50,10 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 8px;
-      background: #1a1d20;
+      background: linear-gradient(90deg, #111318 0%, #171626 55%, #13121d 100%);
       border-bottom: 2px solid #000000;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      position: relative;
       z-index: 10;
     }
 
@@ -60,10 +62,87 @@
       height: 100%;
       display: flex;
       align-items: center;
+      gap: 6px;
       cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .drag-region:active {
+      cursor: grabbing;
+    }
+
+    .brand-cube {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.7));
+      animation: cubeFloat 3s ease-in-out infinite alternate;
+    }
+
+    .cube-icon {
+      display: block;
+    }
+
+    .brand-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-size: 8px;
-      color: #92cc41;
-      letter-spacing: 1px;
+      line-height: 1;
+      pointer-events: none;
+      letter-spacing: 0.8px;
+    }
+
+    .title-block {
+      color: #e2e8f0;
+      text-shadow: 0 1px 2px #000000, 0 0 4px rgba(226, 232, 240, 0.4);
+    }
+
+    .title-void {
+      color: #c084fc;
+      background: linear-gradient(135deg, #e879f9 0%, #c084fc 45%, #818cf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
+      filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.6));
+      letter-spacing: 1.2px;
+    }
+
+    .title-pulse-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #c084fc;
+      box-shadow: 0 0 6px #c084fc, 0 0 10px rgba(168, 85, 247, 0.8);
+      pointer-events: none;
+      margin-left: 2px;
+      animation: voidPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes voidPulse {
+      0%, 100% {
+        opacity: 0.35;
+        transform: scale(0.85);
+        box-shadow: 0 0 4px #a855f7;
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.15);
+        box-shadow: 0 0 8px #e879f9, 0 0 12px #a855f7;
+      }
+    }
+
+    @keyframes cubeFloat {
+      0% {
+        transform: translateY(0px);
+        filter: drop-shadow(0 0 3px rgba(129, 140, 248, 0.5));
+      }
+      100% {
+        transform: translateY(-0.75px);
+        filter: drop-shadow(0 0 6px rgba(192, 132, 252, 0.9));
+      }
     }
 
 
@@ -447,7 +526,21 @@
 <body>
   <!-- Frameless Drag Header & Controls (26px) -->
   <div class="drag-header pywebview-drag-region">
-    <div class="drag-region">TASKBAR DICE :: M1</div>
+    <div class="drag-region" title="Block Void - Drag to reposition">
+      <span class="brand-cube" aria-hidden="true">
+        <svg viewBox="0 0 14 14" width="13" height="13" class="cube-icon">
+          <polygon points="7,1 13,4.2 7,7.4 1,4.2" fill="#818cf8" />
+          <polygon points="1,4.2 7,7.4 7,13 1,9.8" fill="#4f46e5" />
+          <polygon points="13,4.2 13,9.8 7,13 7,7.4" fill="#312e81" />
+          <circle cx="7" cy="7.4" r="1.4" fill="#c084fc" />
+        </svg>
+      </span>
+      <span class="brand-title">
+        <span class="title-block">BLOCK</span>
+        <span class="title-void">VOID</span>
+      </span>
+      <span class="title-pulse-dot" title="Core Active"></span>
+    </div>
     <div class="header-controls">
       <div class="scale-chips" id="scaleChips" title="Window Scale">
         <button type="button" class="btn-scale is-active" data-scale="1" title="Scale 1x (400x420)">1x</button>

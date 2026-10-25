@@ -18,5 +18,5 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt
 
 :run_app
-echo [LAUNCH] Starting TaskbarDice Desktop Widget...
+echo [LAUNCH] Starting Block Void Desktop Widget...
 python app.py

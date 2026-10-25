@@ -44,6 +44,7 @@ $RECYCLE.BIN/
 build/
 dist/
 *.spec
+*.zip
 
 # IDE / Editor artifacts
 .idea/
