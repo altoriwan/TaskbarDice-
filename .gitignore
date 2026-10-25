@@ -45,6 +45,7 @@ build/
 dist/
 *.spec
 *.zip
+legacy_runtime_data/
 
 # IDE / Editor artifacts
 .idea/
