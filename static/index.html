@@ -792,9 +792,11 @@
       });
     }
 
-    // Hover inspection state
+    // Hover inspection state. Hit polygons are captured from the exact geometry rendered
+    // in the previous frame, so hover and double-click use the same visible silhouette.
     let hoveredDie = null;
     let mousePos = { x: -1, y: -1 };
+    let lastRenderedHitPolygons = new Map();
 
     // Particle Pools & Zero-Allocation Recycling Pools (60 FPS & Zero GC Churn)
     const MAX_SLIME_DRIPS = 80;
@@ -899,6 +901,8 @@
     // Screen Shake & Streaks & Floating Texts
     let screenShakeFrames = 0;
     let screenShakeMagnitude = 0;
+    let screenShakeOffsetX = 0;
+    let screenShakeOffsetY = 0;
     let sessionStreak = 0;
     const floatingTexts = [];
 
@@ -1094,6 +1098,112 @@
         wobble = Math.sin(d.bounceFrame * 1.5) * 0.05;
       }
       return baseTilt + wobble;
+    }
+
+    /** Returns the exact six-vertex outer silhouette of the rendered isometric die. */
+    function getDiceSilhouettePolygon(cx, cy, width, ry, height) {
+      const rx = width / 2;
+      return [
+        { x: cx,      y: cy - ry },
+        { x: cx + rx, y: cy },
+        { x: cx + rx, y: cy + height },
+        { x: cx,      y: cy + ry + height },
+        { x: cx - rx, y: cy + height },
+        { x: cx - rx, y: cy }
+      ];
+    }
+
+    /** Draws a closed polygon without introducing a rectangular hover frame. */
+    function tracePolygon(c, polygon) {
+      if (!polygon || polygon.length < 3) return;
+      c.beginPath();
+      c.moveTo(polygon[0].x, polygon[0].y);
+      for (let i = 1; i < polygon.length; i++) c.lineTo(polygon[i].x, polygon[i].y);
+      c.closePath();
+    }
+
+    /** Expands a polygon evenly around its centroid for the subtle outer hover rim. */
+    function scalePolygonFromCentroid(polygon, scale) {
+      if (!polygon || polygon.length < 3) return [];
+      const center = polygon.reduce((sum, point) => ({
+        x: sum.x + point.x / polygon.length,
+        y: sum.y + point.y / polygon.length
+      }), { x: 0, y: 0 });
+      return polygon.map(point => ({
+        x: Math.round((center.x + (point.x - center.x) * scale) * 100) / 100,
+        y: Math.round((center.y + (point.y - center.y) * scale) * 100) / 100
+      }));
+    }
+
+    /** Point-in-polygon test; points exactly on an edge count as inside. */
+    function pointInPolygon(x, y, polygon) {
+      if (!polygon || polygon.length < 3 || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const a = polygon[j];
+        const b = polygon[i];
+        const cross = (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x);
+        const dot = (x - a.x) * (x - b.x) + (y - a.y) * (y - b.y);
+        if (Math.abs(cross) < 1e-7 && dot <= 1e-7) return true;
+        const intersects = ((b.y > y) !== (a.y > y)) &&
+          (x < ((a.x - b.x) * (y - b.y)) / (a.y - b.y) + b.x);
+        if (intersects) inside = !inside;
+      }
+      return inside;
+    }
+
+    /** Applies the same die tilt, stack wobble and screen shake used by Canvas rendering. */
+    function transformDicePolygon(polygon, cx, cy, height, tiltAngle, stackOffsetX, wobbleX, wobbleTilt, shakeX, shakeY) {
+      const pivotY = cy + height / 2;
+      const cosTilt = Math.cos(tiltAngle);
+      const sinTilt = Math.sin(tiltAngle);
+      const cosWobble = Math.cos(wobbleTilt);
+      const sinWobble = Math.sin(wobbleTilt);
+      return polygon.map(point => {
+        const dx = point.x - cx;
+        const dy = point.y - pivotY;
+        const x = cx + dx * cosTilt - dy * sinTilt + stackOffsetX;
+        const y = pivotY + dx * sinTilt + dy * cosTilt;
+        const stackDx = x - 200;
+        const rotatedX = 200 + stackDx * cosWobble - y * sinWobble + wobbleX;
+        const rotatedY = stackDx * sinWobble + y * cosWobble;
+        return { x: rotatedX + shakeX, y: rotatedY + shakeY };
+      });
+    }
+
+    /**
+     * Returns the last rendered hit polygons; computes a conservative first-frame
+     * fallback when the animation loop has not populated its cache yet (e.g. tests).
+     */
+    function getDieHitPolygons(d, index) {
+      const cached = lastRenderedHitPolygons.get(d);
+      if (cached && cached.length) return cached;
+      const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
+      const rot = getEffectiveRotFactor(d);
+      const timestamp = Date.now();
+      let renderY = d.currentY;
+      if (d.bounceFrame > 0) renderY += (d.bounceFrame > 2 ? -3 : -1);
+      const jitter = calculateTwitchJitter(rot, index, timestamp);
+      const cx = 200 + jitter.dx;
+      const baseY = renderY + jitter.dy;
+      const offsetX = getDieStackOffsetX(d, index);
+      const tilt = getDieTiltAngle(d, index);
+      const overloaded = diceStack.length >= 10;
+      const wobbleX = overloaded ? Math.sin(timestamp * 0.008) * 2.2 : 0;
+      const wobbleTilt = overloaded ? Math.sin(timestamp * 0.006) * 0.015 : 0;
+      const base = transformDicePolygon(
+        getDiceSilhouettePolygon(cx, baseY, cfg.width, cfg.ry, cfg.height),
+        cx, baseY, cfg.height, tilt, offsetX, wobbleX, wobbleTilt, screenShakeOffsetX, screenShakeOffsetY
+      );
+      if (d === hoveredDie) {
+        const liftedY = baseY - 2;
+        const lifted = transformDicePolygon(
+          getDiceSilhouettePolygon(cx, liftedY, cfg.width, cfg.ry, cfg.height),
+          cx, liftedY, cfg.height, tilt, offsetX, wobbleX, wobbleTilt, screenShakeOffsetX, screenShakeOffsetY
+        );
+        return [base, lifted];
+      }
+      return [base];
     }
 
     /**
@@ -2637,10 +2747,13 @@
       // Apply screen shake micro-juice
       ctx.save();
       if (screenShakeFrames > 0) {
-        const sx = (Math.random() - 0.5) * screenShakeMagnitude;
-        const sy = (Math.random() - 0.5) * screenShakeMagnitude;
-        ctx.translate(sx, sy);
+        screenShakeOffsetX = (Math.random() - 0.5) * screenShakeMagnitude;
+        screenShakeOffsetY = (Math.random() - 0.5) * screenShakeMagnitude;
+        ctx.translate(screenShakeOffsetX, screenShakeOffsetY);
         screenShakeFrames--;
+      } else {
+        screenShakeOffsetX = 0;
+        screenShakeOffsetY = 0;
       }
 
       // Target state calculation
@@ -2659,6 +2772,7 @@
 
       // Check if stack is completely cleared or fresh startup
       if (diceStack.length === 0 && explosionParticles.length === 0) {
+        lastRenderedHitPolygons = new Map();
         if (!hasClearedAll) {
           // Tier 0 Empty Void startup background (#121417)
           ctx.fillStyle = '#121417';
@@ -2721,6 +2835,7 @@
         ctx.rotate(wobbleTilt);
         ctx.translate(-centerX, 0);
       }
+      const frameHitPolygons = new Map();
 
       for (let i = 0; i < diceStack.length; i++) {
         const d = diceStack[i];
@@ -2756,11 +2871,31 @@
         // Apply Twitch vibration micro-jitter for Stage 5 (rot >= 0.8)
         const jitter = calculateTwitchJitter(rot, i, now);
         const dieRenderX = centerX + jitter.dx;
-        const dieRenderY = renderY + jitter.dy;
+        const baseDieRenderY = renderY + jitter.dy;
+        const hoverLift = (d === hoveredDie) ? 2 : 0;
+        const dieRenderY = baseDieRenderY - hoverLift;
 
         // Natural organic stack stagger and micro-tilt
         const stackOffsetX = getDieStackOffsetX(d, i);
         const tiltAngle = getDieTiltAngle(d, i);
+
+        // Cache screen-space polygons from the exact geometry rendered this frame.
+        // Keeping the base and lifted silhouettes while hovering prevents edge flicker.
+        const basePolygon = transformDicePolygon(
+          getDiceSilhouettePolygon(dieRenderX, baseDieRenderY, cfg.width, cfg.ry, cfg.height),
+          dieRenderX, baseDieRenderY, cfg.height, tiltAngle, stackOffsetX,
+          wobbleX, wobbleTilt, screenShakeOffsetX, screenShakeOffsetY
+        );
+        if (hoverLift > 0) {
+          const liftedPolygon = transformDicePolygon(
+            getDiceSilhouettePolygon(dieRenderX, dieRenderY, cfg.width, cfg.ry, cfg.height),
+            dieRenderX, dieRenderY, cfg.height, tiltAngle, stackOffsetX,
+            wobbleX, wobbleTilt, screenShakeOffsetX, screenShakeOffsetY
+          );
+          frameHitPolygons.set(d, [basePolygon, liftedPolygon]);
+        } else {
+          frameHitPolygons.set(d, [basePolygon]);
+        }
 
         // Spawn continuous viscous slime drips for Stage 5
         if (rot >= 0.8) {
@@ -2779,7 +2914,8 @@
         if (i > 0) {
           ctx.fillStyle = (rot >= 0.75) ? 'rgba(5, 46, 22, 0.35)' : 'rgba(0, 0, 0, 0.25)';
           ctx.beginPath();
-          ctx.ellipse(centerX + jitter.dx * 0.25, renderY + cfg.height + 2, cfg.width * 0.5, 5, 0, 0, Math.PI * 2);
+          const shadowWidth = cfg.width * (d === hoveredDie ? 0.58 : 0.5);
+          ctx.ellipse(centerX + jitter.dx * 0.25, renderY + cfg.height + 2, shadowWidth, 5, 0, 0, Math.PI * 2);
           ctx.fill();
         }
 
@@ -2791,22 +2927,33 @@
           drawOverdueDieBanner(ctx, dieRenderX, dieRenderY, cfg.width, cfg.ry);
         }
 
-        // 2px Glowing pixel border for hovered resting die (synchronized with jitter)
+        // Hover outline follows the six-sided isometric silhouette, never a bounding rectangle.
         if (d === hoveredDie) {
           ctx.save();
-          const glowAlpha = 0.65 + 0.35 * Math.sin(now * 0.008);
-          const isOverdue = (rot >= 1.0);
-          ctx.shadowColor = isOverdue ? '#e76e55' : '#ffd700';
-          ctx.shadowBlur = 6;
-          ctx.strokeStyle = isOverdue ? `rgba(231, 110, 85, ${glowAlpha})` : `rgba(255, 215, 0, ${glowAlpha})`; // 2px glowing pixel border
+          const silhouette = getDiceSilhouettePolygon(dieRenderX, dieRenderY, cfg.width, cfg.ry, cfg.height);
+          const outerRim = scalePolygonFromCentroid(silhouette, 1.055);
+
+          tracePolygon(ctx, outerRim);
+          ctx.strokeStyle = 'rgba(255, 243, 196, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.shadowColor = 'rgba(255, 243, 196, 0.35)';
+          ctx.shadowBlur = 2;
+          ctx.stroke();
+
+          tracePolygon(ctx, silhouette);
+          ctx.strokeStyle = '#fff3c4';
           ctx.lineWidth = 2;
-          ctx.strokeRect(dieRenderX - cfg.width / 2 - 2, dieRenderY - cfg.ry - 2, cfg.width + 4, cfg.height + cfg.ry * 2 + 4);
+          ctx.lineJoin = 'miter';
+          ctx.shadowColor = 'rgba(255, 243, 196, 0.45)';
+          ctx.shadowBlur = 3;
+          ctx.stroke();
           ctx.restore();
         }
 
         ctx.restore(); // restore individual die transform
       }
 
+      lastRenderedHitPolygons = frameHitPolygons;
       ctx.restore(); // restore wobble transform
 
       // 4. Update and draw dripping slime particles
@@ -3253,16 +3400,12 @@
       mousePos.y = (e.clientY - rect.top) * scaleY;
       hoveredDie = null;
 
-      const centerX = 200;
       for (let i = diceStack.length - 1; i >= 0; i--) {
         const d = diceStack[i];
-        // Resting die check (|currentY - targetY| <= 2.0)
+        // Only resting dice can be inspected; use rendered silhouette polygons, not an AABB.
         if (Math.abs(d.currentY - d.targetY) <= 2.0 && Math.abs(d.velocityY) <= 0.5) {
-          const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
-          const rx = cfg.width / 2;
-          const topY = d.currentY - cfg.ry;
-          const botY = d.currentY + cfg.ry + cfg.height;
-          if (mousePos.x >= centerX - rx && mousePos.x <= centerX + rx && mousePos.y >= topY && mousePos.y <= botY) {
+          const polygons = getDieHitPolygons(d, i);
+          if (polygons.some(polygon => pointInPolygon(mousePos.x, mousePos.y, polygon))) {
             hoveredDie = d;
             break;
           }
@@ -3543,9 +3686,8 @@
       const scaleY = rect.height > 0 ? (canvas.height / rect.height) : 1;
       const mx = (e.clientX - rect.left) * scaleX;
       const my = (e.clientY - rect.top) * scaleY;
-      const centerX = 200;
-
-      // Scan from top die (highest index) down to bottom die (index 0)
+      // Scan from top die (highest index) down to bottom die (index 0), using the
+      // same cached polygon set as hover so empty bounding-box corners never select a task.
       for (let i = diceStack.length - 1; i >= 0; i--) {
         const d = diceStack[i];
 
@@ -3554,17 +3696,8 @@
           continue;
         }
 
-        const cfg = DICE_CONFIG[d.weight_score] || DICE_CONFIG[3];
-        const rx = cfg.width / 2;
-        const ry = cfg.width / 4;
-
-        // Bounding box: x in [centerX - rx, centerX + rx], y in [currentY - ry, currentY + ry + height]
-        const topY = d.currentY - ry;
-        const botY = d.currentY + ry + cfg.height;
-        const leftX = centerX - rx;
-        const rightX = centerX + rx;
-
-        if (mx >= leftX && mx <= rightX && my >= topY && my <= botY) {
+        const polygons = getDieHitPolygons(d, i);
+        if (polygons.some(polygon => pointInPolygon(mx, my, polygon))) {
           selectedTask = d;
           modalTaskName.textContent = `TASK: "${d.stored_title || d.title}"`;
           modalOverlay.style.display = 'flex';

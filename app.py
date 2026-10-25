@@ -68,6 +68,16 @@ class TaskbarDiceAPI:
                 "message": f"Task '{candidate['title']}' already exists in active tower"
             }
 
+        # Check active tasks for overload
+        if len(active_tasks) >= max_active:
+            print("[TaskbarDice] Rejecting task: Tower overload (10/10 active tasks limit reached)")
+            return {
+                "status": "error",
+                "error": "overload",
+                "code": "overload",
+                "message": "Maximum active tasks reached (10)"
+            }
+
         task = self.storage.add_task(
             text,
             weight=weight,
@@ -75,12 +85,22 @@ class TaskbarDiceAPI:
             max_active=max_active
         )
         if task is None:
-            print("[TaskbarDice] Rejecting task: Tower overload (10/10 active tasks limit reached)")
+            # Distinguish tower overload (limit reached) from storage I/O errors
+            active_count = len([t for t in self.storage.get_tasks() if t.get("status") != "completed"])
+            if active_count >= max_active:
+                print("[TaskbarDice] Rejecting task: Tower overload (10/10 active tasks limit reached)")
+                return {
+                    "status": "error",
+                    "error": "overload",
+                    "code": "overload",
+                    "message": "Maximum active tasks reached (10)"
+                }
+            print(f"[TaskbarDice] Storage error persisting task: '{candidate['title']}'")
             return {
                 "status": "error",
-                "error": "overload",
-                "code": "overload",
-                "message": "Maximum active tasks reached (10)"
+                "error": "storage_error",
+                "code": "storage_error",
+                "message": "Failed to persist task to storage"
             }
 
         print(f"[TaskbarDice] Task added: '{task['title']}' (weight: {task['weight_score']}, id: {task['id']})")
@@ -118,7 +138,13 @@ class TaskbarDiceAPI:
         success = self.storage.complete_task(task_id)
         print(f"[TaskbarDice] Task completed: '{task_id}', success: {success}, was_overdue: {was_overdue}")
         if not success:
-            return {"status": "not_found", "task_id": task_id}
+            return {
+                "status": "error",
+                "error": "storage_error",
+                "code": "storage_error",
+                "task_id": task_id,
+                "message": "Failed to complete task in storage"
+            }
         return {
             "status": "ok",
             "task_id": task_id,
